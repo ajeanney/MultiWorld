@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "id": "creativeworld",
+  "version": "${version}",
+
+  "name": "CreativeWorld",
+  "description": "This is an example description! Tell everyone what your mod is about!",
+  "authors": [
+    "Uxzylon"
+  ],
+  "contact": {
+    "homepage": "https://fabricmc.net/",
+    "sources": "https://github.com/FabricMC/fabric-example-mod"
+  },
+
+  "license": "CC0-1.0",
+  "icon": "assets/creativeworld/icon.png",
+
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.gmail.anthony17j.creativeworld.Main"
+    ]
+  },
+  "mixins": [
+    "creativeworld.mixins.json"
+  ],
+
+  "depends": {
+    "fabricloader": ">=0.11.3",
+    "fabric": "*",
+    "minecraft": "1.17.x",
+    "java": ">=16"
+  },
+  "suggests": {
+    "another-mod": "*"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.gmail.anthony17j.creativeworld.mixin",
+  "compatibilityLevel": "JAVA_16",
+  "mixins": [
+    "AdvancementMixin",
+    "BedSpawnPointMixin",
+    "EndPortalMixin",
+    "NetherPortalMixin",
+    "StatMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
