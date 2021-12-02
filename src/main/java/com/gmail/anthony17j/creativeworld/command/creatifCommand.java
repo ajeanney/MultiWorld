@@ -14,13 +14,14 @@ import static net.minecraft.server.command.CommandManager.literal;
 public class creatifCommand {
     public static LiteralCommandNode<ServerCommandSource> commandNode;
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher, boolean dedicated) {
-        commandNode = dispatcher.register(literal("creatif").executes(creatifCommand::creatif));
+        //commandNode = dispatcher.register(literal("creatif").executes(creatifCommand::creatif));
+        commandNode = dispatcher.register(literal("creative").executes(creatifCommand::creatif));
     }
 
     static int creatif(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         ServerPlayerEntity player = context.getSource().getPlayer();
 
-        if (player.getServerWorld().getRegistryKey() != Main.CREATIVE_KEY) {
+        if (player.getEntityWorld().getRegistryKey() != Main.CREATIVE_KEY) {
             Utils.saveInv(player,"survival");
             Utils.loadInv(player,"creative");
             //player.sendMessage(new LiteralText("Bienvenue dans le monde créatif"), false);

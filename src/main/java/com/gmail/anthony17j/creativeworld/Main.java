@@ -1,11 +1,10 @@
 package com.gmail.anthony17j.creativeworld;
 
 import com.gmail.anthony17j.creativeworld.command.creatifCommand;
-import com.gmail.anthony17j.creativeworld.command.test2Command;
-import com.gmail.anthony17j.creativeworld.command.testCommand;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
+import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.registry.Registry;
 import net.minecraft.util.registry.RegistryKey;
@@ -52,8 +51,8 @@ public class Main implements ModInitializer {
 
 		ServerPlayerEvents.AFTER_RESPAWN.register(((oldPlayer, newPlayer, alive) -> {
 			//LOGGER.info("Player Respawn - old:{} new:{} alive:{}", oldPlayer.getServerWorld().getRegistryKey().getValue(), newPlayer.getServerWorld().getRegistryKey().getValue(), alive);
-			if (oldPlayer.getServerWorld().getRegistryKey() == CREATIVE_KEY) {
-				newPlayer.teleport(oldPlayer.getServerWorld(),0,63,0,0,0);
+			if (oldPlayer.getEntityWorld().getRegistryKey() == CREATIVE_KEY) {
+				newPlayer.teleport((ServerWorld) oldPlayer.getEntityWorld(),0,63,0,0,0);
 			}
 		}));
 	}

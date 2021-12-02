@@ -17,21 +17,21 @@ public abstract class AdvancementMixin {
 
     @Inject(at = @At("HEAD"), method = "grantCriterion", cancellable = true)
     public void grantCriterion(Advancement advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
-        if (this.owner.getServerWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+        if (this.owner.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "revokeCriterion", cancellable = true)
     public void revokeCriterion(Advancement advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
-        if (this.owner.getServerWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+        if (this.owner.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "sendUpdate", cancellable = true)
     public void sendUpdate(ServerPlayerEntity player, CallbackInfo ci) {
-        if (player.getServerWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+        if (player.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
             ci.cancel();
         }
     }
