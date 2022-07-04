@@ -1,8 +1,8 @@
 package com.gmail.anthony17j.creativeworld;
 
-import com.gmail.anthony17j.creativeworld.command.creatifCommand;
+import com.gmail.anthony17j.creativeworld.command.creativeCommand;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.command.v1.CommandRegistrationCallback;
+import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
@@ -38,9 +38,7 @@ public class Main implements ModInitializer {
 		Main.CREATIVE_KEY = RegistryKey.of(Registry.WORLD_KEY, new Identifier("creativeworld", "creative"));
 		Registry.register(Registry.CHUNK_GENERATOR, new Identifier("creativeworld", "creative"), VoidChunkGenerator.CODEC);
 
-		CommandRegistrationCallback.EVENT.register(creatifCommand::register);
-		//CommandRegistrationCallback.EVENT.register(testCommand::register);
-		//CommandRegistrationCallback.EVENT.register(test2Command::register);
+		CommandRegistrationCallback.EVENT.register(creativeCommand::register);
 
 		/*ServerEntityWorldChangeEvents.AFTER_PLAYER_CHANGE_WORLD.register((player, origin, destination) -> {
 			LOGGER.info("Moved player {}: [{} -> {}]", player, origin.getRegistryKey().getValue(), destination.getRegistryKey().getValue());

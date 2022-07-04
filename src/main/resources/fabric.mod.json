@@ -4,13 +4,13 @@
   "version": "${version}",
 
   "name": "CreativeWorld",
-  "description": "This is an example description! Tell everyone what your mod is about!",
+  "description": "Fabric Server Side mod that adds a Creative World with separate Inventories",
   "authors": [
     "Uxzylon"
   ],
   "contact": {
-    "homepage": "https://fabricmc.net/",
-    "sources": "https://github.com/FabricMC/fabric-example-mod"
+    "homepage": "https://anthony17j.dev",
+    "sources": "https://github.com/Uxzylon/CreativeWorld"
   },
 
   "license": "CC0-1.0",
@@ -27,9 +27,9 @@
   ],
 
   "depends": {
-    "fabricloader": ">=0.13.3",
+    "fabricloader": ">=0.14.6",
     "fabric": "*",
-    "minecraft": "1.18.x",
+    "minecraft": "~1.19",
     "java": ">=17"
   },
   "suggests": {

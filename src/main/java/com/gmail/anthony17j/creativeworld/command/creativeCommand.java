@@ -6,19 +6,21 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.tree.LiteralCommandNode;
+import net.minecraft.command.CommandRegistryAccess;
+import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 
 import static net.minecraft.server.command.CommandManager.literal;
 
-public class creatifCommand {
+public class creativeCommand {
     public static LiteralCommandNode<ServerCommandSource> commandNode;
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher, boolean dedicated) {
-        //commandNode = dispatcher.register(literal("creatif").executes(creatifCommand::creatif));
-        commandNode = dispatcher.register(literal("creative").executes(creatifCommand::creatif));
+    public static void register(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, CommandManager.RegistrationEnvironment environment) {
+        dispatcher.register(literal("creative").executes(creativeCommand::creative));
+        //dispatcher.register(literal("creatif").executes(creativeCommand::creative));
     }
 
-    static int creatif(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+    static int creative(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         ServerPlayerEntity player = context.getSource().getPlayer();
 
         if (player.getEntityWorld().getRegistryKey() != Main.CREATIVE_KEY) {
