@@ -3,17 +3,12 @@ package com.gmail.anthony17j.creativeworld;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.block.BlockState;
-import net.minecraft.structure.StructureSet;
-import net.minecraft.util.dynamic.RegistryOps;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.registry.Registry;
 import net.minecraft.world.ChunkRegion;
 import net.minecraft.world.HeightLimitView;
 import net.minecraft.world.Heightmap;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.biome.BiomeKeys;
 import net.minecraft.world.biome.source.BiomeAccess;
-import net.minecraft.world.biome.source.FixedBiomeSource;
+import net.minecraft.world.biome.source.BiomeSource;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.GenerationStep;
 import net.minecraft.world.gen.StructureAccessor;
@@ -23,24 +18,25 @@ import net.minecraft.world.gen.chunk.VerticalBlockSample;
 import net.minecraft.world.gen.noise.NoiseConfig;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 
 
 public class VoidChunkGenerator extends ChunkGenerator {
-    public static final Codec<VoidChunkGenerator> CODEC = RecordCodecBuilder.create((instance) ->
-            createStructureSetRegistryGetter(instance).and(
-                            RegistryOps.createRegistryCodec(Registry.BIOME_KEY).forGetter((generator) -> generator.biomeRegistry)
-                    )
-                    .apply(instance, instance.stable(VoidChunkGenerator::new))
-    );
+//    public static final Codec<VoidChunkGenerator> CODEC = RecordCodecBuilder.create((instance) ->
+//            createStructureSetRegistryGetter(instance).and(
+//                            RegistryOps.createRegistryCodec(RegistryKeys.BIOME).forGetter((generator) -> generator.biomeRegistry)
+//                    )
+//                    .apply(instance, instance.stable(VoidChunkGenerator::new))
+//    );
 
-    private final Registry<Biome> biomeRegistry;
+    public static final Codec<VoidChunkGenerator> CODEC = RecordCodecBuilder.create(instance ->
+            instance.group(
+                    (BiomeSource.CODEC.fieldOf("biome_source")).forGetter(ChunkGenerator::getBiomeSource)
+            ).apply(instance, instance.stable(VoidChunkGenerator::new)));
 
-    public VoidChunkGenerator(Registry<StructureSet> registry, Registry<Biome> biomeRegistry) {
-        super(registry, Optional.empty(), new FixedBiomeSource(biomeRegistry.getOrCreateEntry(BiomeKeys.PLAINS)));
-        this.biomeRegistry = biomeRegistry;
+    public VoidChunkGenerator(BiomeSource biomeSource) {
+        super(biomeSource);
     }
 
     @Override

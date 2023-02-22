@@ -9,11 +9,11 @@ import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.StringNbtReader;
+import net.minecraft.registry.RegistryKey;
+import net.minecraft.registry.RegistryKeys;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
-import net.minecraft.util.registry.Registry;
-import net.minecraft.util.registry.RegistryKey;
 import net.minecraft.world.GameMode;
 import net.minecraft.world.World;
 import net.minecraft.world.dimension.DimensionOptions;
@@ -21,12 +21,9 @@ import net.minecraft.world.dimension.DimensionOptions;
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
-import java.lang.reflect.Array;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 
 public class Utils {
@@ -188,8 +185,8 @@ public class Utils {
             float yaw = Float.parseFloat(file.get("yaw").toString());
             String dimension = (String) file.get("dimension");
             String[] strArr = dimension.split(":");
-            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(Registry.DIMENSION_KEY, new Identifier(strArr[0], strArr[1]));
-            RegistryKey<World> key = RegistryKey.of(Registry.WORLD_KEY, DIMENSION_KEY.getValue());
+            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, new Identifier(strArr[0], strArr[1]));
+            RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
             ServerWorld creativeDim = (ServerWorld) player.getEntityWorld().getServer().getWorld(key);
             player.teleport(creativeDim,posX,posY,posZ,yaw,pitch);
 
@@ -282,9 +279,9 @@ public class Utils {
 
             //reset pos
             String[] strArr = dimension.split(":");
-            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(Registry.DIMENSION_KEY, new Identifier(strArr[0], strArr[1]));
-            RegistryKey<World> key = RegistryKey.of(Registry.WORLD_KEY, DIMENSION_KEY.getValue());
-            ServerWorld creativeDim = (ServerWorld) player.getEntityWorld().getServer().getWorld(key);
+            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, new Identifier(strArr[0], strArr[1]));
+            RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
+            ServerWorld creativeDim = player.getEntityWorld().getServer().getWorld(key);
             player.teleport(creativeDim,0,63,0,0,0);
         }
     }
