@@ -1,11 +1,15 @@
 plugins {
-	id 'fabric-loom' version '1.1-SNAPSHOT'
+	id 'fabric-loom' version '1.2-SNAPSHOT'
 	id 'maven-publish'
 	id 'com.github.johnrengelman.shadow' version '7.0.0'
 }
 
 version = project.mod_version
 group = project.maven_group
+
+base {
+	archivesName = project.archives_base_name + "-mc" + project.minecraft_version
+}
 
 repositories {
 	// Add repositories to retrieve artifacts from in here.
@@ -14,6 +18,18 @@ repositories {
 	// See https://docs.gradle.org/current/userguide/declaring_repositories.html
 	// for more information about repositories
 	mavenCentral()
+}
+
+loom {
+	splitEnvironmentSourceSets()
+
+	mods {
+		"modid" {
+			sourceSet sourceSets.main
+			sourceSet sourceSets.client
+		}
+	}
+
 }
 
 configurations {
@@ -38,10 +54,6 @@ dependencies {
 	extraLibs group: 'com.github.cliftonlabs', name: 'json-simple', version: '4.0.0'
 
 	configurations.compileClasspath.extendsFrom(configurations.extraLibs)
-}
-
-base {
-	archivesName = project.archives_base_name + "-mc" + project.minecraft_version
 }
 
 processResources {
@@ -69,7 +81,7 @@ java {
 
 jar {
 	//from("LICENSE") {
-		//rename { "${it}_${base.archivesName.get()}"}
+		//rename { "${it}_${project.archivesBaseName}"}
 	//}
 
 	from {
