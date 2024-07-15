@@ -1,26 +1,26 @@
 package com.gmail.anthony17j.creativeworld;
 
 import com.gmail.anthony17j.creativeworld.command.creativeCommand;
+import com.mojang.authlib.minecraft.client.MinecraftClient;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.entity.event.v1.ServerPlayerEvents;
-import net.minecraft.registry.Registries;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.minecraft.registry.*;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 import net.minecraft.world.dimension.DimensionOptions;
 import net.minecraft.world.dimension.DimensionType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class Main implements ModInitializer {
 
 	public static final RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(
 			RegistryKeys.DIMENSION,
-			new Identifier("creativeworld", "creative")
+			Identifier.of("creativeworld", "creative")
 	);
 
 	public static RegistryKey<World> CREATIVE_KEY = RegistryKey.of(
@@ -30,15 +30,20 @@ public class Main implements ModInitializer {
 
 	private static final RegistryKey<DimensionType> DIMENSION_TYPE_KEY = RegistryKey.of(
 			RegistryKeys.DIMENSION_TYPE,
-			new Identifier("creativeworld", "creative")
+			Identifier.of("creativeworld", "creative")
 	);
 
-	private static final Logger LOGGER = LogManager.getLogger(Main.class);
+	public static MinecraftServer server;
+
+	public static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
 
 	@Override
 	public void onInitialize() {
-		Main.CREATIVE_KEY = RegistryKey.of(RegistryKeys.WORLD, new Identifier("creativeworld", "creative"));
-		Registry.register(Registries.CHUNK_GENERATOR, new Identifier("creativeworld", "creative"), VoidChunkGenerator.CODEC);
+		ServerLifecycleEvents.SERVER_STARTING.register((MinecraftServer s) -> server = s);
+		ServerLifecycleEvents.SERVER_STOPPED .register((MinecraftServer s) -> server = null  );
+
+		Main.CREATIVE_KEY = RegistryKey.of(RegistryKeys.WORLD, Identifier.of("creativeworld", "creative"));
+		Registry.register(Registries.CHUNK_GENERATOR, Identifier.of("creativeworld", "creative"), VoidChunkGenerator.CODEC);
 
 		CommandRegistrationCallback.EVENT.register(creativeCommand::register);
 

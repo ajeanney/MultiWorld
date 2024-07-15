@@ -1,14 +1,19 @@
 package com.gmail.anthony17j.creativeworld;
 
-import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.block.BlockState;
+import net.minecraft.registry.RegistryEntryLookup;
+import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.RegistryOps;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.ChunkRegion;
 import net.minecraft.world.HeightLimitView;
 import net.minecraft.world.Heightmap;
+import net.minecraft.world.biome.Biome;
+import net.minecraft.world.biome.BiomeKeys;
 import net.minecraft.world.biome.source.BiomeAccess;
-import net.minecraft.world.biome.source.BiomeSource;
+import net.minecraft.world.biome.source.FixedBiomeSource;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.gen.GenerationStep;
 import net.minecraft.world.gen.StructureAccessor;
@@ -19,28 +24,18 @@ import net.minecraft.world.gen.noise.NoiseConfig;
 
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-
 
 public class VoidChunkGenerator extends ChunkGenerator {
-//    public static final Codec<VoidChunkGenerator> CODEC = RecordCodecBuilder.create((instance) ->
-//            createStructureSetRegistryGetter(instance).and(
-//                            RegistryOps.createRegistryCodec(RegistryKeys.BIOME).forGetter((generator) -> generator.biomeRegistry)
-//                    )
-//                    .apply(instance, instance.stable(VoidChunkGenerator::new))
-//    );
+    public static final MapCodec<VoidChunkGenerator> CODEC = RecordCodecBuilder.mapCodec((instance) ->
+            instance.group(RegistryOps.getEntryLookupCodec(RegistryKeys.BIOME))
+                    .apply(instance, instance.stable(VoidChunkGenerator::new)));
 
-    public static final Codec<VoidChunkGenerator> CODEC = RecordCodecBuilder.create(instance ->
-            instance.group(
-                    (BiomeSource.CODEC.fieldOf("biome_source")).forGetter(ChunkGenerator::getBiomeSource)
-            ).apply(instance, instance.stable(VoidChunkGenerator::new)));
-
-    public VoidChunkGenerator(BiomeSource biomeSource) {
-        super(biomeSource);
+    public VoidChunkGenerator(RegistryEntryLookup<Biome> biomeRegistry) {
+        super(new FixedBiomeSource(biomeRegistry.getOrThrow(BiomeKeys.PLAINS)));
     }
 
     @Override
-    protected Codec<? extends ChunkGenerator> getCodec() {
+    protected MapCodec<? extends ChunkGenerator> getCodec() {
         return CODEC;
     }
 
@@ -62,7 +57,7 @@ public class VoidChunkGenerator extends ChunkGenerator {
     }
 
     @Override
-    public CompletableFuture<Chunk> populateNoise(Executor executor, Blender blender, NoiseConfig noiseConfig, StructureAccessor structureAccessor, Chunk chunk) {
+    public CompletableFuture<Chunk> populateNoise(Blender blender, NoiseConfig noiseConfig, StructureAccessor structureAccessor, Chunk chunk) {
         return CompletableFuture.completedFuture(chunk);
     }
 

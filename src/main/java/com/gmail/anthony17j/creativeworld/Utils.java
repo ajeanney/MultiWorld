@@ -4,13 +4,16 @@ import com.github.cliftonlabs.json_simple.JsonArray;
 import com.github.cliftonlabs.json_simple.JsonObject;
 import com.github.cliftonlabs.json_simple.Jsoner;
 import com.gmail.anthony17j.creativeworld.util.Json;
+import com.mojang.authlib.minecraft.client.MinecraftClient;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import net.minecraft.entity.effect.StatusEffectInstance;
 import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NbtCompound;
 import net.minecraft.nbt.StringNbtReader;
+import net.minecraft.registry.Registries;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
+import net.minecraft.registry.RegistryWrapper;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
@@ -26,13 +29,9 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Objects;
 
-public class Utils {
-    public static String effectsToString(StatusEffectInstance effectInstance) {
-        NbtCompound tag = new NbtCompound();
-        effectInstance.writeNbt(tag);
-        return tag.toString();
-    }
+import static com.gmail.anthony17j.creativeworld.Main.server;
 
+public class Utils {
     public static void saveInv(ServerPlayerEntity player,String world) {
         try {
             // create a writer
@@ -43,23 +42,23 @@ public class Utils {
             //save inventory
             String[] playerInventoryS = new String[36];
             for (int i = 0; i < playerInventoryS.length; i++) {
-                playerInventoryS[i] = String.valueOf(player.getInventory().main.get(i).writeNbt(new NbtCompound()));
+                playerInventoryS[i] = String.valueOf(player.getInventory().main.get(i).encodeAllowEmpty(server.getRegistryManager()));
             }
 
             //save armor
             String[] playerArmorS = new String[4];
             for (int i = 0; i < playerArmorS.length; i++) {
-                playerArmorS[i] = String.valueOf(player.getInventory().armor.get(i).writeNbt(new NbtCompound()));
+                playerArmorS[i] = String.valueOf(player.getInventory().armor.get(i).encodeAllowEmpty(server.getRegistryManager()));
             }
 
             //save ender chest
             String[] playerEnderChestS = new String[27];
             for (int i = 0; i < playerEnderChestS.length; i++) {
-                playerEnderChestS[i] = String.valueOf(player.getEnderChestInventory().getStack(i).writeNbt(new NbtCompound()));
+                playerEnderChestS[i] = String.valueOf(player.getEnderChestInventory().getStack(i).encodeAllowEmpty(server.getRegistryManager()));
             }
 
             //save offHand
-            String playerOffHandS = player.getInventory().offHand.get(0).writeNbt(new NbtCompound()).toString();
+            String playerOffHandS = player.getInventory().offHand.getFirst().encodeAllowEmpty(server.getRegistryManager()).toString();
 
             //save selected slot
             int playerSelectedSlotS = player.getInventory().selectedSlot;
@@ -79,7 +78,7 @@ public class Utils {
             //save effects
             ArrayList<String> effects = new ArrayList<>();
             for (StatusEffectInstance s : player.getStatusEffects()) {
-                effects.add(Utils.effectsToString(s));
+                effects.add(s.writeNbt().toString());
             }
             String playerEffectsS = effects.toString();
 
@@ -135,23 +134,23 @@ public class Utils {
             //set inventory
             JsonArray inventory = (JsonArray) file.get("inventory");
             for (int i = 0; i < 36; i++) {
-                player.getInventory().main.set(i, ItemStack.fromNbt(StringNbtReader.parse((String) inventory.get(i))));
+                player.getInventory().main.set(i, ItemStack.fromNbtOrEmpty(server.getRegistryManager(), StringNbtReader.parse((String) inventory.get(i))));
             }
 
             //set armor
             JsonArray armor = (JsonArray) file.get("armor");
             for (int i = 0; i < 4; i++) {
-                player.getInventory().armor.set(i,ItemStack.fromNbt(StringNbtReader.parse((String) armor.get(i))));
+                player.getInventory().armor.set(i,ItemStack.fromNbtOrEmpty(server.getRegistryManager(), StringNbtReader.parse((String) armor.get(i))));
             }
 
             //set ender chest
             JsonArray enderChest = (JsonArray) file.get("enderChest");
             for (int i = 0; i < 27; i++) {
-                player.getEnderChestInventory().setStack(i,ItemStack.fromNbt(StringNbtReader.parse((String) enderChest.get(i))));
+                player.getEnderChestInventory().setStack(i,ItemStack.fromNbtOrEmpty(server.getRegistryManager(), StringNbtReader.parse((String) enderChest.get(i))));
             }
 
             //set offHand
-            player.getInventory().offHand.set(0,ItemStack.fromNbt(StringNbtReader.parse((String) file.get("offHand"))));
+            player.getInventory().offHand.set(0,ItemStack.fromNbtOrEmpty(server.getRegistryManager(), StringNbtReader.parse((String) file.get("offHand"))));
 
             //set selected slot
             player.getInventory().selectedSlot = Integer.parseInt(file.get("selectedSlot").toString());
@@ -185,7 +184,7 @@ public class Utils {
             float yaw = Float.parseFloat(file.get("yaw").toString());
             String dimension = (String) file.get("dimension");
             String[] strArr = dimension.split(":");
-            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, new Identifier(strArr[0], strArr[1]));
+            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
             RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
             ServerWorld creativeDim = (ServerWorld) player.getEntityWorld().getServer().getWorld(key);
             player.teleport(creativeDim,posX,posY,posZ,yaw,pitch);
@@ -279,7 +278,7 @@ public class Utils {
 
             //reset pos
             String[] strArr = dimension.split(":");
-            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, new Identifier(strArr[0], strArr[1]));
+            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
             RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
             ServerWorld creativeDim = player.getEntityWorld().getServer().getWorld(key);
             player.teleport(creativeDim,0,63,0,0,0);

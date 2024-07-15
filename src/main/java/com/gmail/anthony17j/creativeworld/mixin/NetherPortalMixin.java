@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class NetherPortalMixin {
     @Shadow public abstract World getEntityWorld();
 
-    @Inject(at = @At("HEAD"), method = "tickPortal", cancellable = true)
+    @Inject(at = @At("HEAD"), method = "tickPortalTeleportation", cancellable = true)
     public void tickNetherPortal(CallbackInfo ci) {
         if (this.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
             ci.cancel();

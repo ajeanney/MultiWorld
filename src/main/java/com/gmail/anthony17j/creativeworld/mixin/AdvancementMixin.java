@@ -2,6 +2,7 @@ package com.gmail.anthony17j.creativeworld.mixin;
 
 import com.gmail.anthony17j.creativeworld.Main;
 import net.minecraft.advancement.Advancement;
+import net.minecraft.advancement.AdvancementEntry;
 import net.minecraft.advancement.PlayerAdvancementTracker;
 import net.minecraft.server.network.ServerPlayerEntity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -16,14 +17,14 @@ public abstract class AdvancementMixin {
     @Shadow private ServerPlayerEntity owner;
 
     @Inject(at = @At("HEAD"), method = "grantCriterion", cancellable = true)
-    public void grantCriterion(Advancement advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
+    public void grantCriterion(AdvancementEntry advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
         if (this.owner.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "revokeCriterion", cancellable = true)
-    public void revokeCriterion(Advancement advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
+    public void revokeCriterion(AdvancementEntry advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
         if (this.owner.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
             cir.cancel();
         }
