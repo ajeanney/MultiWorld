@@ -1,6 +1,6 @@
 package com.gmail.anthony17j.creativeworld.command;
 
-import com.gmail.anthony17j.creativeworld.Main;
+import com.gmail.anthony17j.creativeworld.CreativeWorld;
 import com.gmail.anthony17j.creativeworld.Utils;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
@@ -23,7 +23,7 @@ public class creativeCommand {
     static int creative(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
         ServerPlayerEntity player = context.getSource().getPlayer();
 
-        if (player.getEntityWorld().getRegistryKey() != Main.CREATIVE_KEY) {
+        if (player.getEntityWorld().getRegistryKey() != CreativeWorld.CREATIVE_KEY) {
             Utils.saveInv(player,"survival");
             Utils.loadInv(player,"creative");
             //player.sendMessage(new LiteralText("Bienvenue dans le monde créatif"), false);

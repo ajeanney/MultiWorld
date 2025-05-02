@@ -1,7 +1,6 @@
 package com.gmail.anthony17j.creativeworld.mixin;
 
-import com.gmail.anthony17j.creativeworld.Main;
-import net.minecraft.advancement.Advancement;
+import com.gmail.anthony17j.creativeworld.CreativeWorld;
 import net.minecraft.advancement.AdvancementEntry;
 import net.minecraft.advancement.PlayerAdvancementTracker;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -18,21 +17,21 @@ public abstract class AdvancementMixin {
 
     @Inject(at = @At("HEAD"), method = "grantCriterion", cancellable = true)
     public void grantCriterion(AdvancementEntry advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
-        if (this.owner.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+        if (this.owner.getEntityWorld().getRegistryKey() == CreativeWorld.CREATIVE_KEY) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "revokeCriterion", cancellable = true)
     public void revokeCriterion(AdvancementEntry advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
-        if (this.owner.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+        if (this.owner.getEntityWorld().getRegistryKey() == CreativeWorld.CREATIVE_KEY) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "sendUpdate", cancellable = true)
-    public void sendUpdate(ServerPlayerEntity player, CallbackInfo ci) {
-        if (player.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+    public void sendUpdate(ServerPlayerEntity player, boolean showToast, CallbackInfo ci) {
+        if (player.getEntityWorld().getRegistryKey() == CreativeWorld.CREATIVE_KEY) {
             ci.cancel();
         }
     }

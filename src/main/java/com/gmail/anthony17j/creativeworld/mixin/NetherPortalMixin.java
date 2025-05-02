@@ -1,6 +1,6 @@
 package com.gmail.anthony17j.creativeworld.mixin;
 
-import com.gmail.anthony17j.creativeworld.Main;
+import com.gmail.anthony17j.creativeworld.CreativeWorld;
 import net.minecraft.entity.Entity;
 import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Mixin;
@@ -15,7 +15,7 @@ public abstract class NetherPortalMixin {
 
     @Inject(at = @At("HEAD"), method = "tickPortalTeleportation", cancellable = true)
     public void tickNetherPortal(CallbackInfo ci) {
-        if (this.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+        if (this.getEntityWorld().getRegistryKey() == CreativeWorld.CREATIVE_KEY) {
             ci.cancel();
         }
     }

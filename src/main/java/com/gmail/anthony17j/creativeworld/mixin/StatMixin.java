@@ -1,6 +1,6 @@
 package com.gmail.anthony17j.creativeworld.mixin;
 
-import com.gmail.anthony17j.creativeworld.Main;
+import com.gmail.anthony17j.creativeworld.CreativeWorld;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.stat.Stat;
 import net.minecraft.stat.StatHandler;
@@ -13,14 +13,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class StatMixin {
     @Inject(at = @At("HEAD"), method = "setStat", cancellable = true)
     public void setStat(PlayerEntity player, Stat<?> stat, int value, CallbackInfo ci) {
-        if (player.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+        if (player.getEntityWorld().getRegistryKey() == CreativeWorld.CREATIVE_KEY) {
             ci.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "increaseStat", cancellable = true)
     public void increaseStat(PlayerEntity player, Stat<?> stat, int value, CallbackInfo ci) {
-        if (player.getEntityWorld().getRegistryKey() == Main.CREATIVE_KEY) {
+        if (player.getEntityWorld().getRegistryKey() == CreativeWorld.CREATIVE_KEY) {
             ci.cancel();
         }
     }

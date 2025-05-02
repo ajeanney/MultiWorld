@@ -19,7 +19,7 @@
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.gmail.anthony17j.creativeworld.Main"
+      "com.gmail.anthony17j.creativeworld.CreativeWorld"
     ]
   },
   "mixins": [
@@ -27,8 +27,8 @@
   ],
 
   "depends": {
-    "fabricloader": ">=0.15.11",
-    "minecraft": "~1.21",
+    "fabricloader": ">=0.16.10",
+    "minecraft": "~1.21.5",
     "java": ">=21",
     "fabric-api": "*"
   },
