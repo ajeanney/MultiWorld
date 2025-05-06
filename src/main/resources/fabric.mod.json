@@ -1,29 +1,29 @@
 {
   "schemaVersion": 1,
-  "id": "creativeworld",
+  "id": "multiworld",
   "version": "${version}",
 
-  "name": "CreativeWorld",
-  "description": "Fabric Server Side mod that adds a Creative World with separate Inventories",
+  "name": "MultiWorld",
+  "description": "Fabric Server Side mod that adds multiple worlds with seperate player data.",
   "authors": [
     "Uxzylon"
   ],
   "contact": {
     "homepage": "https://anthony17j.dev",
-    "sources": "https://github.com/Uxzylon/CreativeWorld"
+    "sources": "https://github.com/Uxzylon/MultiWorld"
   },
 
   "license": "CC0-1.0",
-  "icon": "assets/creativeworld/icon.png",
+  "icon": "assets/multiworld/icon.png",
 
   "environment": "*",
   "entrypoints": {
     "main": [
-      "com.gmail.anthony17j.creativeworld.CreativeWorld"
+      "com.gmail.anthony17j.multiworld.MultiWorld"
     ]
   },
   "mixins": [
-    "creativeworld.mixins.json"
+    "multiworld.mixins.json"
   ],
 
   "depends": {

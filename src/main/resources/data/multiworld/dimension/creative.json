@@ -1,5 +1,5 @@
 {
-  "type": "creativeworld:creative_type",
+  "type": "multiworld:creative_type",
   "generator": {
     "type": "minecraft:flat",
     "settings": {

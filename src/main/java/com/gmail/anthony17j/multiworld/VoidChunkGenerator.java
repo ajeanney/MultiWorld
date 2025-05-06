@@ -1,4 +1,4 @@
-package com.gmail.anthony17j.creativeworld;
+package com.gmail.anthony17j.multiworld;
 
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
