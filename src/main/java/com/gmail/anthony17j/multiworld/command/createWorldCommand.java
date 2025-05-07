@@ -2,7 +2,10 @@ package com.gmail.anthony17j.multiworld.command;
 
 import com.gmail.anthony17j.multiworld.*;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.command.CommandSource;
 import net.minecraft.registry.*;
+import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -11,29 +14,37 @@ import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.NotNull;
 
-import static com.gmail.anthony17j.multiworld.MultiWorld.namespace;
-import static com.mojang.brigadier.arguments.StringArgumentType.getString;
-import static com.mojang.brigadier.arguments.StringArgumentType.greedyString;
-import static net.minecraft.server.command.CommandManager.argument;
+import java.util.stream.Collectors;
+
+import static com.gmail.anthony17j.multiworld.CustomServerWorld.getBaseWorldName;
+import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 import static net.minecraft.server.command.CommandManager.literal;
 
 public final class createWorldCommand {
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        dispatcher.register(literal("mvtp")
-            .then(argument("world", greedyString())
-            .executes(ctx -> command(ctx.getSource(), getString(ctx, "world")))));
+        dispatcher.register(literal("mw")
+                .then(CommandManager.argument("dimension", StringArgumentType.word())
+                        .suggests((context, builder) -> CommandSource.suggestMatching(
+                                context.getSource().getWorldKeys().stream()
+                                        .map(RegistryKey::getValue)
+                                        .filter(id -> id.getNamespace().equals(NAMESPACE) || id.getNamespace().equals("minecraft"))
+                                        .filter(id -> !id.getPath().endsWith("_nether") && !id.getPath().endsWith("_end"))
+                                        .map(Identifier::getPath)
+                                        .collect(Collectors.toList()),
+                                builder
+                        ))
+                        .executes(ctx -> {
+                            String worldName = StringArgumentType.getString(ctx, "dimension");
+                            return command(ctx.getSource(), worldName);
+                        }))
+        );
     }
 
     static int command(ServerCommandSource source, String worldString) {
-        if (worldString.endsWith("_nether")) {
-            worldString = worldString.substring(0, worldString.length() - 7);
-        } else if (worldString.endsWith("_end")) {
-            worldString = worldString.substring(0, worldString.length() - 4);
-        }
-
+        worldString = getBaseWorldName(worldString);
         ServerWorld worldTarget = source.getServer().getOverworld();
         if (!worldString.equals("overworld")) {
-          Identifier key = Identifier.of(namespace, worldString);
+          Identifier key = Identifier.of(NAMESPACE, worldString);
             RegistryKey<World> worldKey = RegistryKey.of(
                     RegistryKeys.WORLD,
                     key
@@ -69,12 +80,6 @@ public final class createWorldCommand {
         ServerWorld sourceWorld = source.getWorld();
         RegistryKey<World> sourceWorldKey = sourceWorld.getRegistryKey() == World.END || sourceWorld.getRegistryKey() == World.NETHER ? World.OVERWORLD : sourceWorld.getRegistryKey();
         String sourceWorldName = sourceWorldKey.getValue().getPath();
-        // if sourceWorldName ends with _nether or _end, remove it
-        if (sourceWorldName.endsWith("_nether")) {
-            sourceWorldName = sourceWorldName.substring(0, sourceWorldName.length() - 7);
-        } else if (sourceWorldName.endsWith("_end")) {
-            sourceWorldName = sourceWorldName.substring(0, sourceWorldName.length() - 4);
-        }
-        return sourceWorldName;
+        return getBaseWorldName(sourceWorldName);
     }
 }

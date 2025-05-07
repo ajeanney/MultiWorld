@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 
 import java.util.Objects;
 
-import static com.gmail.anthony17j.multiworld.MultiWorld.namespace;
+import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 @Mixin(AbstractFireBlock.class)
 public abstract class AbstractFireBlockMixin {
@@ -23,7 +23,7 @@ public abstract class AbstractFireBlockMixin {
         }
 
         Identifier worldId = world.getRegistryKey().getValue();
-        if (Objects.equals(worldId.getNamespace(), namespace)) {
+        if (Objects.equals(worldId.getNamespace(), NAMESPACE)) {
             String path = worldId.getPath();
             return !path.contains("_end");
         }

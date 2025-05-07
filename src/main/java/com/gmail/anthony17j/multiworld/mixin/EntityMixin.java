@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import static com.gmail.anthony17j.multiworld.CustomServerWorld.getMockRegistryKey;
+import static com.gmail.anthony17j.multiworld.CustomServerWorld.isWorldWithNether;
 
 @Mixin(Entity.class)
 public abstract class EntityMixin {
@@ -19,7 +20,7 @@ public abstract class EntityMixin {
 
     @Inject(at = @At("HEAD"), method = "tickPortalTeleportation", cancellable = true)
     public void tickNetherPortal(CallbackInfo ci) {
-        if (this.getEntityWorld().getRegistryKey() == MultiWorld.CREATIVE_KEY) {
+        if (!isWorldWithNether(this.getEntityWorld().getRegistryKey())) {
             ci.cancel();
         }
     }

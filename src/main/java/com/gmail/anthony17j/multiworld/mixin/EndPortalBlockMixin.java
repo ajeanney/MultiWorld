@@ -23,14 +23,15 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.Objects;
 
 import static com.gmail.anthony17j.multiworld.CustomServerWorld.isCustomEndWorld;
-import static com.gmail.anthony17j.multiworld.MultiWorld.namespace;
+import static com.gmail.anthony17j.multiworld.CustomServerWorld.isWorldWithEnd;
+import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 @Mixin(EndPortalBlock.class)
 public abstract class EndPortalBlockMixin {
 
     @Inject(at = @At("HEAD"), method = "onEntityCollision", cancellable = true)
     public void onEntityCollision(BlockState state, World world, BlockPos pos, Entity entity, EntityCollisionHandler handler, CallbackInfo ci) {
-        if (entity.getEntityWorld().getRegistryKey() == MultiWorld.CREATIVE_KEY) {
+        if (!isWorldWithEnd(entity.getEntityWorld().getRegistryKey())) {
             ci.cancel();
         }
     }
@@ -61,7 +62,7 @@ public abstract class EndPortalBlockMixin {
     private boolean modifyEndFlag(boolean bl, ServerWorld world, Entity entity, BlockPos pos) {
         RegistryKey<World> currentWorldKey = world.getRegistryKey();
 
-        if (Objects.equals(currentWorldKey.getValue().getNamespace(), namespace)) {
+        if (Objects.equals(currentWorldKey.getValue().getNamespace(), NAMESPACE)) {
             String path = currentWorldKey.getValue().getPath();
             boolean isEndWorld = !path.endsWith("_end");
 
@@ -83,12 +84,12 @@ public abstract class EndPortalBlockMixin {
         ServerWorld targetWorld = server.getWorld(registryKey);
         ServerWorld initialWorld = entity.getServer().getWorld(entity.getWorld().getRegistryKey());
 
-        if (Objects.equals(initialWorld.getRegistryKey().getValue().getNamespace(), namespace)) {
+        if (Objects.equals(initialWorld.getRegistryKey().getValue().getNamespace(), NAMESPACE)) {
             String destinationName = getDestinationName(initialWorld);
 
             RegistryKey<World> destinationKey = RegistryKey.of(
                     RegistryKeys.WORLD,
-                    Identifier.of(namespace, destinationName)
+                    Identifier.of(NAMESPACE, destinationName)
             );
             ServerWorld destinationWorld = initialWorld.getServer().getWorld(destinationKey);
 

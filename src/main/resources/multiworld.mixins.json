@@ -18,10 +18,10 @@
     "MinecraftServerMixin",
     "NetherPortalBlockMixin",
     "ServerPlayerEntityMixin",
+    "ServerWorldAccessor",
     "ServerWorldMixin",
     "SimpleRegistryMixin",
-    "StatHandlerAccessor",
-    "StatMixin"
+    "StatHandlerAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -11,14 +11,14 @@ import net.minecraft.world.World;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import java.util.Objects;
 
+import static com.gmail.anthony17j.multiworld.CustomServerWorld.getBaseWorldName;
 import static com.gmail.anthony17j.multiworld.CustomServerWorld.getMockRegistryKey;
-import static com.gmail.anthony17j.multiworld.MultiWorld.namespace;
+import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 @Mixin(ServerPlayerEntity.class)
 public abstract class ServerPlayerEntityMixin {
@@ -38,12 +38,12 @@ public abstract class ServerPlayerEntityMixin {
         ServerPlayerEntity player = (ServerPlayerEntity)(Object)this;
         ServerWorld currentWorld = player.getServerWorld();
 
-        if (Objects.equals(currentWorld.getRegistryKey().getValue().getNamespace(), namespace)) {
+        if (Objects.equals(currentWorld.getRegistryKey().getValue().getNamespace(), NAMESPACE)) {
             String worldName = getBaseWorldName(currentWorld.getRegistryKey().getValue().getPath());
 
             RegistryKey<World> targetKey = RegistryKey.of(
                     RegistryKeys.WORLD,
-                    Identifier.of(namespace, worldName)
+                    Identifier.of(NAMESPACE, worldName)
             );
 
             ServerWorld targetWorld = server.getWorld(targetKey);
@@ -54,16 +54,6 @@ public abstract class ServerPlayerEntityMixin {
         }
 
         return server.getOverworld();
-    }
-
-    @Unique
-    private String getBaseWorldName(String worldPath) {
-        if (worldPath.endsWith("_nether")) {
-            return worldPath.substring(0, worldPath.length() - 7);
-        } else if (worldPath.endsWith("_end")) {
-            return worldPath.substring(0, worldPath.length() - 4);
-        }
-        return worldPath;
     }
 
     @Redirect(

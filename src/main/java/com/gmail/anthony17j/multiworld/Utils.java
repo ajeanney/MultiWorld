@@ -2,9 +2,9 @@ package com.gmail.anthony17j.multiworld;
 
 import com.github.cliftonlabs.json_simple.JsonObject;
 import com.github.cliftonlabs.json_simple.Jsoner;
+import com.gmail.anthony17j.multiworld.mixin.ServerWorldAccessor;
 import com.gmail.anthony17j.multiworld.mixin.StatHandlerAccessor;
 import com.gmail.anthony17j.multiworld.util.Json;
-import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.ObjectSet;
 import net.minecraft.entity.Entity;
 import net.minecraft.nbt.NbtCompound;
@@ -32,7 +32,7 @@ import java.nio.file.Paths;
 import java.util.Set;
 
 import static com.gmail.anthony17j.multiworld.MultiWorld.LOGGER;
-import static com.gmail.anthony17j.multiworld.MultiWorld.namespace;
+import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 public class Utils {
     public static void saveInv(ServerPlayerEntity player, String world) {
@@ -41,10 +41,10 @@ public class Utils {
             String worldFolder = player.getServer().getSaveProperties().getLevelName();
 
             // create a writer
-            if (new File(worldFolder + "/" + namespace + "/" + world).mkdirs()) {
-                LOGGER.info("Directory created: {}/{}/{}", worldFolder, namespace, world);
+            if (new File(worldFolder + "/" + NAMESPACE + "/" + world).mkdirs()) {
+                LOGGER.info("Directory created: {}/{}/{}", worldFolder, NAMESPACE, world);
             }
-            BufferedWriter writer = Files.newBufferedWriter(Paths.get(worldFolder + "/" + namespace + "/" + world + "/" + player.getUuidAsString() + ".json"));
+            BufferedWriter writer = Files.newBufferedWriter(Paths.get(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getUuidAsString() + ".json"));
 
             NbtCompound tag = new NbtCompound();
             player.writeNbt(tag);
@@ -120,7 +120,7 @@ public class Utils {
 
         String worldFolder = player.getServer().getSaveProperties().getLevelName();
 
-        try (FileReader fileReader = new FileReader(worldFolder + "/" + namespace + "/" + world + "/" + player.getUuidAsString() + ".json")) {
+        try (FileReader fileReader = new FileReader(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getUuidAsString() + ".json")) {
             JsonObject file = (JsonObject) Jsoner.deserialize(fileReader);
 
             String playerString = (String) file.get("player");
@@ -240,7 +240,7 @@ public class Utils {
             player.getAdvancementTracker().reload(player.getServer().getAdvancementLoader());
 
             // Teleport
-            String dimension = world.equals("overworld") ? "minecraft:overworld" : namespace + ":" + world;
+            String dimension = world.equals("overworld") ? "minecraft:overworld" : NAMESPACE + ":" + world;
 
             String[] strArr = dimension.split(":");
             RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
@@ -266,8 +266,7 @@ public class Utils {
             player.teleport(teleportTarget.world(), teleportTarget.position().getX(), teleportTarget.position().getY(), teleportTarget.position().getZ(), PositionFlag.getFlags(0), teleportTarget.yaw(), teleportTarget.pitch(), true);
 
             // Do it twice to prevent a bug where the player must log out and back in to change gamemode
-            GameMode gameMode = server.getDefaultGameMode();
-
+            GameMode gameMode = ((ServerWorldAccessor) serverWorld).getWorldProperties().getGameMode();
             player.changeGameMode(GameMode.byIndex(player.getGameMode().getIndex() + 1 % 3));
             player.changeGameMode(gameMode);
         }
@@ -275,7 +274,8 @@ public class Utils {
 
     public static String getMostRecentWorldSaved(ServerPlayerEntity player) {
         // in the namespace folder, check every folder (world), then inside check the file with the user uuid. The world with the most recent file is the one we want
-        File folder = new File(namespace);
+        String worldFolder = player.getServer().getSaveProperties().getLevelName();
+        File folder = new File(worldFolder + "/" + NAMESPACE);
         File[] listOfFiles = folder.listFiles();
         if (listOfFiles != null) {
             String mostRecentWorld = "";

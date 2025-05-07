@@ -1,36 +1,25 @@
 package com.gmail.anthony17j.multiworld;
 
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.world.SaveProperties;
-import net.minecraft.world.level.ServerWorldProperties;
-import net.minecraft.world.level.UnmodifiableLevelProperties;
+import net.minecraft.world.GameMode;
+import net.minecraft.world.level.LevelProperties;
 
-public final class CustomServerWorldProperties extends UnmodifiableLevelProperties {
-    final long seed;
-    BlockPos spawnPos;
-    float spawnAngle;
+public final class CustomServerWorldProperties extends LevelProperties {
+    public final long seed;
+    private final GameMode gameMode;
 
-    public CustomServerWorldProperties(SaveProperties saveProperties, long seed) {
-        super(saveProperties, saveProperties.getMainWorldProperties());
+    public CustomServerWorldProperties(LevelProperties levelProperties, long seed, GameMode gameMode) {
+        super(
+                levelProperties.getLevelInfo(),
+                levelProperties.getGeneratorOptions(),
+                LevelProperties.SpecialProperty.NONE,
+                levelProperties.getLifecycle()
+        );
         this.seed = seed;
-        ServerWorldProperties mainWorldProperties = saveProperties.getMainWorldProperties();
-        this.spawnPos = mainWorldProperties.getSpawnPos();
-        this.spawnAngle = mainWorldProperties.getSpawnAngle();
+        this.gameMode = gameMode != null ? gameMode : levelProperties.getGameMode();
     }
 
     @Override
-    public void setSpawnPos(BlockPos pos, float angle) {
-        this.spawnPos = pos.toImmutable();
-        this.spawnAngle = angle;
-    }
-
-    @Override
-    public float getSpawnAngle() {
-        return spawnAngle;
-    }
-
-    @Override
-    public BlockPos getSpawnPos() {
-        return spawnPos;
+    public GameMode getGameMode() {
+        return this.gameMode;
     }
 }
