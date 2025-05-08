@@ -8,13 +8,11 @@ import java.io.Writer;
 
 public class Json implements Jsonable {
     private final String player;
-    private final JsonObject respawn;
     private final JsonObject stats;
     private final JsonObject advancements;
 
-    public Json(String player, JsonObject respawn, JsonObject stats, JsonObject advancements) {
+    public Json(String player, JsonObject stats, JsonObject advancements) {
         this.player = player;
-        this.respawn = respawn;
         this.stats = stats;
         this.advancements = advancements;
     }
@@ -22,7 +20,6 @@ public class Json implements Jsonable {
     // Constructeur pour la compatibilité avec l'ancien code
     public Json(String player) {
         this.player = player;
-        this.respawn = new JsonObject();
         this.stats = new JsonObject();
         this.advancements = new JsonObject();
     }
@@ -31,7 +28,6 @@ public class Json implements Jsonable {
     public String toJson() {
         JsonObject json = new JsonObject();
         json.put("player", this.player);
-        json.put("respawn", this.respawn);
         json.put("stats", this.stats);
         json.put("advancements", this.advancements);
         return json.toJson();

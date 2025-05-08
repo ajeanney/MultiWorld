@@ -9,18 +9,26 @@ import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 
+import java.io.IOException;
+
 import static com.gmail.anthony17j.multiworld.CustomServerWorld.getRegistryKey;
 import static com.gmail.anthony17j.multiworld.MultiWorld.CREATIVE_WORLD_NAME;
 import static com.gmail.anthony17j.multiworld.Utils.getMostRecentWorldSaved;
-import static com.gmail.anthony17j.multiworld.command.createWorldCommand.getSourceWorldName;
+import static com.gmail.anthony17j.multiworld.command.MultiWorldCommand.getSourceWorldName;
 import static net.minecraft.server.command.CommandManager.literal;
 
-public class creativeCommand {
+public class CreativeCommand {
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher, CommandRegistryAccess registryAccess, CommandManager.RegistrationEnvironment environment) {
-        dispatcher.register(literal("creative").executes(creativeCommand::creative));
+        dispatcher.register(literal("creative").executes(context -> {
+            try {
+                return creative(context);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        }));
     }
 
-    static int creative(CommandContext<ServerCommandSource> context) throws CommandSyntaxException {
+    static int creative(CommandContext<ServerCommandSource> context) throws CommandSyntaxException, IOException {
         ServerPlayerEntity player = context.getSource().getPlayer();
 
         String sourceWorld = getSourceWorldName(context.getSource());

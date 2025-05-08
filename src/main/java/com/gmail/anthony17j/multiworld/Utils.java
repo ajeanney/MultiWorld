@@ -29,6 +29,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.Optional;
 import java.util.Set;
 
 import static com.gmail.anthony17j.multiworld.MultiWorld.LOGGER;
@@ -58,7 +59,7 @@ public class Utils {
             }
 
             // Save respawn position
-            JsonObject respawnJson = new JsonObject();
+            /*JsonObject respawnJson = new JsonObject();
             ServerPlayerEntity.Respawn respawn = player.getRespawn();
 
             if (respawn != null) {
@@ -68,6 +69,16 @@ public class Utils {
                 respawnJson.put("posZ", respawn.pos().getZ());
                 respawnJson.put("angle", respawn.angle());
                 respawnJson.put("forced", respawn.forced());
+            }*/
+            // add respawn position to the tag
+            NbtCompound respawnTag = new NbtCompound();
+            ServerPlayerEntity.Respawn respawn = player.getRespawn();
+            if (respawn != null) {
+                respawnTag.putString("dimension", respawn.dimension().getValue().toString());
+                respawnTag.putBoolean("forced", respawn.forced());
+                respawnTag.putFloat("angle", respawn.angle());
+                respawnTag.putIntArray("pos", new int[]{respawn.pos().getX(), respawn.pos().getY(), respawn.pos().getZ()});
+                tag.put("respawn", respawnTag);
             }
 
             // Save player stats
@@ -102,7 +113,7 @@ public class Utils {
                 }
             }
 
-            Json uuid = new Json(tag.toString(), respawnJson, statsJson, advancementsJson);
+            Json uuid = new Json(tag.toString(), statsJson, advancementsJson);
 
             // convert Json list to JSON and write to file.json
             Jsoner.serialize(uuid, writer);
@@ -131,8 +142,30 @@ public class Utils {
             player.readEnderPearls(playerNbt);
             player.getAbilities().readNbt(playerNbt);
 
+            String[] strArr = playerNbt.getString("Dimension").orElse(World.OVERWORLD.getValue().toString()).split(":");
+            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
+            RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
+            ServerWorld dimension = player.getEntityWorld().getServer().getWorld(key);
+
             // Load respawn position
-            if (file.containsKey("respawn")) {
+            // get respawn tag from playerNbt
+            Optional<NbtCompound> respawnTag = playerNbt.getCompound("respawn");
+            if (respawnTag.isPresent()) {
+                NbtCompound respawnData = respawnTag.get();
+                int[] respawnPos = respawnData.getIntArray("pos").orElseThrow();
+                String respawnDimensionStr = respawnData.getString("dimension").orElse(World.OVERWORLD.getValue().toString());
+                String[] dimParts = respawnDimensionStr.split(":");
+                RegistryKey<DimensionOptions> respawnDimensionKey = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(dimParts[0], dimParts[1]));
+                RegistryKey<World> respawnDimension = RegistryKey.of(RegistryKeys.WORLD, respawnDimensionKey.getValue());
+                ServerPlayerEntity.Respawn respawn = new ServerPlayerEntity.Respawn(
+                        respawnDimension,
+                        new BlockPos(respawnPos[0], respawnPos[1], respawnPos[2]),
+                        respawnData.getFloat("angle").orElse(0F),
+                        respawnData.getBoolean("forced").orElse(false)
+                );
+                player.setSpawnPoint(respawn, false);
+            }
+            /*if (file.containsKey("respawn")) {
                 JsonObject respawnData = (JsonObject) file.get("respawn");
 
                 if (!respawnData.isEmpty()) {
@@ -161,7 +194,7 @@ public class Utils {
                     );
                     player.setSpawnPoint(respawn, false);
                 }
-            }
+            }*/
 
             // Load player stats
             if (file.containsKey("stats")) {
@@ -186,11 +219,6 @@ public class Utils {
                 );
                 player.getAdvancementTracker().reload(player.getServer().getAdvancementLoader());
             }
-
-            String[] strArr = playerNbt.getString("Dimension").orElse("minecraft:overworld").split(":");
-            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
-            RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
-            ServerWorld dimension = player.getEntityWorld().getServer().getWorld(key);
 
             player.teleport(
                 dimension,

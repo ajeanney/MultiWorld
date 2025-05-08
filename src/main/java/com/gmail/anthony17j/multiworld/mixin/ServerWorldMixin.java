@@ -1,5 +1,6 @@
 package com.gmail.anthony17j.multiworld.mixin;
 
+import com.gmail.anthony17j.multiworld.CustomServerWorld;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.WorldGenerationProgressListener;
