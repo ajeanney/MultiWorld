@@ -16,6 +16,10 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.stat.*;
+import net.minecraft.storage.NbtReadView;
+import net.minecraft.storage.NbtWriteView;
+import net.minecraft.storage.ReadView;
+import net.minecraft.util.ErrorReporter;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Vec3d;
@@ -47,8 +51,9 @@ public class Utils {
             }
             BufferedWriter writer = Files.newBufferedWriter(Paths.get(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getUuidAsString() + ".json"));
 
-            NbtCompound tag = new NbtCompound();
-            player.writeNbt(tag);
+            ErrorReporter.Logging logging = new ErrorReporter.Logging(player.getErrorReporterContext(), LOGGER);
+            NbtWriteView nbtWriteView = NbtWriteView.create(logging, player.getRegistryManager());
+            player.writeData(nbtWriteView);
 
             // Remove ender pearls the player had launched (they will be put back on load)
             player.getEnderPearls().forEach((enderPearl) -> enderPearl.remove(Entity.RemovalReason.DISCARDED));
@@ -58,20 +63,9 @@ public class Utils {
                 player.getRootVehicle().remove(Entity.RemovalReason.DISCARDED);
             }
 
-            // Save respawn position
-            /*JsonObject respawnJson = new JsonObject();
-            ServerPlayerEntity.Respawn respawn = player.getRespawn();
-
-            if (respawn != null) {
-                respawnJson.put("dimension", respawn.dimension().getValue().toString());
-                respawnJson.put("posX", respawn.pos().getX());
-                respawnJson.put("posY", respawn.pos().getY());
-                respawnJson.put("posZ", respawn.pos().getZ());
-                respawnJson.put("angle", respawn.angle());
-                respawnJson.put("forced", respawn.forced());
-            }*/
             // add respawn position to the tag
             NbtCompound respawnTag = new NbtCompound();
+            NbtCompound tag = nbtWriteView.getNbt();
             ServerPlayerEntity.Respawn respawn = player.getRespawn();
             if (respawn != null) {
                 respawnTag.putString("dimension", respawn.dimension().getValue().toString());
@@ -80,6 +74,7 @@ public class Utils {
                 respawnTag.putIntArray("pos", new int[]{respawn.pos().getX(), respawn.pos().getY(), respawn.pos().getZ()});
                 tag.put("respawn", respawnTag);
             }
+
 
             // Save player stats
             player.getStatHandler().save();
@@ -130,6 +125,7 @@ public class Utils {
         // LOGGER.info("Loading player data for {} in world {}", player.getName().getString(), world);
 
         String worldFolder = player.getServer().getSaveProperties().getLevelName();
+        ErrorReporter.Logging logging = new ErrorReporter.Logging(player.getErrorReporterContext(), LOGGER);
 
         try (FileReader fileReader = new FileReader(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getUuidAsString() + ".json")) {
             JsonObject file = (JsonObject) Jsoner.deserialize(fileReader);
@@ -137,15 +133,15 @@ public class Utils {
             String playerString = (String) file.get("player");
             NbtCompound playerNbt = StringNbtReader.readCompound(playerString);
 
-            player.readNbt(playerNbt);
-            player.readGameModeNbt(playerNbt);
-            player.readEnderPearls(playerNbt);
-            player.getAbilities().readNbt(playerNbt);
+            ReadView nbtReadView = NbtReadView.create(logging, player.getRegistryManager(), playerNbt);
+            player.readData(nbtReadView);
+            player.readEnderPearls(nbtReadView);
+            player.readGameModeData(nbtReadView);
 
             String[] strArr = playerNbt.getString("Dimension").orElse(World.OVERWORLD.getValue().toString()).split(":");
             RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
             RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
-            ServerWorld dimension = player.getEntityWorld().getServer().getWorld(key);
+            ServerWorld dimension = player.getWorld().getServer().getWorld(key);
 
             // Load respawn position
             // get respawn tag from playerNbt
@@ -165,36 +161,6 @@ public class Utils {
                 );
                 player.setSpawnPoint(respawn, false);
             }
-            /*if (file.containsKey("respawn")) {
-                JsonObject respawnData = (JsonObject) file.get("respawn");
-
-                if (!respawnData.isEmpty()) {
-                    String dimensionStr = (String) respawnData.get("dimension");
-                    String[] dimParts = dimensionStr.split(":");
-                    RegistryKey<World> dimension = RegistryKey.of(
-                            RegistryKeys.WORLD,
-                            Identifier.of(dimParts[0], dimParts[1])
-                    );
-
-                    BlockPos respawnPos = new BlockPos(
-                            ((Number) respawnData.get("posX")).intValue(),
-                            ((Number) respawnData.get("posY")).intValue(),
-                            ((Number) respawnData.get("posZ")).intValue()
-                    );
-
-                    float angle = ((Number) respawnData.get("angle")).floatValue();
-                    boolean forced = (Boolean) respawnData.get("forced");
-
-                    // Appliquer le point de réapparition
-                    ServerPlayerEntity.Respawn respawn = new ServerPlayerEntity.Respawn(
-                            dimension,
-                            respawnPos,
-                            angle,
-                            forced
-                    );
-                    player.setSpawnPoint(respawn, false);
-                }
-            }*/
 
             // Load player stats
             if (file.containsKey("stats")) {
@@ -217,8 +183,8 @@ public class Utils {
                     Paths.get(worldFolder + "/advancements/" + player.getUuidAsString() + ".json"),
                     advancementsData.toJson().getBytes()
                 );
-                player.getAdvancementTracker().reload(player.getServer().getAdvancementLoader());
             }
+            player.getAdvancementTracker().reload(player.getServer().getAdvancementLoader());
 
             player.teleport(
                 dimension,
@@ -231,15 +197,15 @@ public class Utils {
                 false
             );
 
-            player.readRootVehicle(playerNbt);
+            player.readRootVehicle(nbtReadView);
         } catch (Exception ex) {
             NbtCompound playerNbt = new NbtCompound();
 
-            player.readNbt(playerNbt);
-            player.readGameModeNbt(playerNbt);
-            player.readEnderPearls(playerNbt);
-            player.readCustomDataFromNbt(playerNbt);
-            player.getAbilities().readNbt(playerNbt);
+            ReadView nbtReadView = NbtReadView.create(logging, player.getRegistryManager(), playerNbt);
+
+            player.readData(nbtReadView);
+            player.readGameModeData(nbtReadView);
+            player.readEnderPearls(nbtReadView);
 
             player.setSpawnPoint(null, false);
 
@@ -277,16 +243,7 @@ public class Utils {
             // teleport to world spawn
             MinecraftServer server = player.getServer();
             ServerWorld serverWorld = server.getWorld(key);
-//            int spawnRadius = server.getSpawnRadius(serverWorld);
-//            BlockPos worldSpawn = serverWorld.getSpawnPos();
-//            worldSpawn = worldSpawn.add(
-//                    (int) (Math.random() * spawnRadius * 2) - spawnRadius,
-//                    0,
-//                    (int) (Math.random() * spawnRadius * 2) - spawnRadius
-//            );
-//            Vec3d centerPos = worldSpawn.toCenterPos();
-//            int i = serverWorld.getWorldChunk(worldSpawn).sampleHeightmap(net.minecraft.world.Heightmap.Type.MOTION_BLOCKING_NO_LEAVES, worldSpawn.getX(), worldSpawn.getZ()) + 1;
-//            worldSpawn = BlockPos.ofFloored(centerPos.x, i, centerPos.z);
+
             Vec3d worldSpawn = player.getWorldSpawnPos(serverWorld, serverWorld.getSpawnPos()).toBottomCenterPos();
             TeleportTarget teleportTarget = new TeleportTarget(serverWorld, worldSpawn, Vec3d.ZERO, 0.0F, 0.0F, false, false, Set.of(), TeleportTarget.NO_OP);
 

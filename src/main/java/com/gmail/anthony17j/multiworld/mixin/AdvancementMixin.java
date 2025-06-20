@@ -19,21 +19,21 @@ public abstract class AdvancementMixin {
 
     @Inject(at = @At("HEAD"), method = "grantCriterion", cancellable = true)
     public void grantCriterion(AdvancementEntry advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
-        if (this.owner.getEntityWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
+        if (this.owner.getWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "revokeCriterion", cancellable = true)
     public void revokeCriterion(AdvancementEntry advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
-        if (this.owner.getEntityWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
+        if (this.owner.getWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "sendUpdate", cancellable = true)
     public void sendUpdate(ServerPlayerEntity player, boolean showToast, CallbackInfo ci) {
-        if (player.getEntityWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
+        if (player.getWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
             ci.cancel();
         }
     }

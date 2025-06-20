@@ -8,9 +8,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.Identifier;
 import net.minecraft.world.World;
-import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
@@ -22,11 +20,6 @@ import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 @Mixin(ServerPlayerEntity.class)
 public abstract class ServerPlayerEntityMixin {
-
-    @Final
-    @Shadow
-    public MinecraftServer server;
-
     @Redirect(
             method = "getRespawnTarget",
             at = @At(
@@ -36,7 +29,7 @@ public abstract class ServerPlayerEntityMixin {
     )
     private ServerWorld redirectGetOverworld(MinecraftServer server) {
         ServerPlayerEntity player = (ServerPlayerEntity)(Object)this;
-        ServerWorld currentWorld = player.getServerWorld();
+        ServerWorld currentWorld = player.getWorld();
 
         if (Objects.equals(currentWorld.getRegistryKey().getValue().getNamespace(), NAMESPACE)) {
             String worldName = getBaseWorldName(currentWorld.getRegistryKey().getValue().getPath());
@@ -71,10 +64,10 @@ public abstract class ServerPlayerEntityMixin {
             method = "worldChanged",
             at = @At(
                     value = "INVOKE",
-                    target = "Lnet/minecraft/world/World;getRegistryKey()Lnet/minecraft/registry/RegistryKey;"
+                    target = "Lnet/minecraft/server/network/ServerPlayerEntity;getWorld()Lnet/minecraft/server/world/ServerWorld;"
             )
     )
-    private RegistryKey<World> redirectGetWorldRegistryKeyInWorldChanged(World world) {
-        return getMockRegistryKey(world.getRegistryKey());
+    private ServerWorld redirectGetWorldInWorldChanged(ServerPlayerEntity player) {
+        return player.getWorld();
     }
 }

@@ -16,11 +16,11 @@ import static com.gmail.anthony17j.multiworld.CustomServerWorld.isWorldWithNethe
 
 @Mixin(Entity.class)
 public abstract class EntityMixin {
-    @Shadow public abstract World getEntityWorld();
+    @Shadow public abstract World getWorld();
 
     @Inject(at = @At("HEAD"), method = "tickPortalTeleportation", cancellable = true)
     public void tickNetherPortal(CallbackInfo ci) {
-        if (!isWorldWithNether(this.getEntityWorld().getRegistryKey())) {
+        if (!isWorldWithNether(this.getWorld().getRegistryKey())) {
             ci.cancel();
         }
     }

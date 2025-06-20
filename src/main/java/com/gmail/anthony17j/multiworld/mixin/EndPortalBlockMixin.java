@@ -31,7 +31,7 @@ public abstract class EndPortalBlockMixin {
 
     @Inject(at = @At("HEAD"), method = "onEntityCollision", cancellable = true)
     public void onEntityCollision(BlockState state, World world, BlockPos pos, Entity entity, EntityCollisionHandler handler, CallbackInfo ci) {
-        if (!isWorldWithEnd(entity.getEntityWorld().getRegistryKey())) {
+        if (!isWorldWithEnd(entity.getWorld().getRegistryKey())) {
             ci.cancel();
         }
     }

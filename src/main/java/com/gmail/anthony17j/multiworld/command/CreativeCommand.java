@@ -30,10 +30,13 @@ public class CreativeCommand {
 
     static int creative(CommandContext<ServerCommandSource> context) throws CommandSyntaxException, IOException {
         ServerPlayerEntity player = context.getSource().getPlayer();
+        if (player == null) {
+            return 1;
+        }
 
         String sourceWorld = getSourceWorldName(context.getSource());
 
-        if (player.getEntityWorld().getRegistryKey() != getRegistryKey(CREATIVE_WORLD_NAME)) {
+        if (player.getWorld().getRegistryKey() != getRegistryKey(CREATIVE_WORLD_NAME)) {
             Utils.saveInv(player, sourceWorld);
             Utils.loadInv(player, CREATIVE_WORLD_NAME);
             //player.sendMessage(new LiteralText("Bienvenue dans le monde créatif"), false);
