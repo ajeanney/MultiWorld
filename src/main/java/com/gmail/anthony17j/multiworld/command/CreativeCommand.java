@@ -11,7 +11,7 @@ import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.io.IOException;
 
-import static com.gmail.anthony17j.multiworld.CustomServerWorld.getRegistryKey;
+import static com.gmail.anthony17j.multiworld.CustomServerWorld.isCreativeWorld;
 import static com.gmail.anthony17j.multiworld.MultiWorld.CREATIVE_WORLD_NAME;
 import static com.gmail.anthony17j.multiworld.Utils.getMostRecentWorldSaved;
 import static com.gmail.anthony17j.multiworld.command.MultiWorldCommand.getSourceWorldName;
@@ -36,12 +36,11 @@ public class CreativeCommand {
 
         String sourceWorld = getSourceWorldName(context.getSource());
 
-        if (player.getWorld().getRegistryKey() != getRegistryKey(CREATIVE_WORLD_NAME)) {
+        if (!isCreativeWorld(player.getEntityWorld().getRegistryKey())) {
             Utils.saveInv(player, sourceWorld);
             Utils.loadInv(player, CREATIVE_WORLD_NAME);
-            //player.sendMessage(new LiteralText("Bienvenue dans le monde créatif"), false);
         } else {
-            String mostRecentWorldSaved = getMostRecentWorldSaved(player);
+            String mostRecentWorldSaved = getMostRecentWorldSaved(player, sourceWorld);
             Utils.saveInv(player, CREATIVE_WORLD_NAME);
             Utils.loadInv(player, mostRecentWorldSaved);
         }

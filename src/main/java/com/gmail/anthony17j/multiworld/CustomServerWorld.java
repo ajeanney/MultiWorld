@@ -1,6 +1,6 @@
 package com.gmail.anthony17j.multiworld;
 
-import com.gmail.anthony17j.multiworld.mixin.MinecraftServerMixin;
+import com.gmail.anthony17j.multiworld.mixin.IMinecraftServerMixin;
 import com.google.common.collect.ImmutableList;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.registry.RegistryKeys;
@@ -17,6 +17,7 @@ import net.minecraft.world.spawner.PatrolSpawner;
 import net.minecraft.world.spawner.PhantomSpawner;
 import java.util.Objects;
 
+import static com.gmail.anthony17j.multiworld.MultiWorld.CREATIVE_WORLD_NAME;
 import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 public class CustomServerWorld extends ServerWorld {
@@ -25,11 +26,11 @@ public class CustomServerWorld extends ServerWorld {
         super(
                 server,
                 Util.getMainWorkerExecutor(),
-                ((MinecraftServerMixin) server).getSession(),
+                ((IMinecraftServerMixin) server).getSession(),
                 levelProperties,
                 registryKey,
                 options,
-                VoidWorldProgressListener.INSTANCE,
+                //VoidWorldProgressListener.INSTANCE,
                 false,
                 // BiomeAccess.hashSeed(seed),
                 seed,
@@ -140,5 +141,13 @@ public class CustomServerWorld extends ServerWorld {
             return path.substring(0, path.length() - 4);
         }
         return path;
+    }
+
+    public static boolean isCreativeWorld(RegistryKey<World> key) {
+        if (Objects.equals(key.getValue().getNamespace(), NAMESPACE)) {
+            String path = getBaseWorldName(key.getValue().getPath());
+            return path.equals(CREATIVE_WORLD_NAME);
+        }
+        return false;
     }
 }

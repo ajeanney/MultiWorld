@@ -210,7 +210,7 @@ public final class MultiWorldCommand {
 
         // Vérifier si des joueurs sont actuellement dans ce monde
         for (ServerPlayerEntity player : source.getServer().getPlayerManager().getPlayerList()) {
-            String currentWorld = getBaseWorldName(player.getWorld().getRegistryKey().getValue().getPath());
+            String currentWorld = getBaseWorldName(player.getEntityWorld().getRegistryKey().getValue().getPath());
             if (currentWorld.equals(worldName)) {
                 // Téléporter le joueur au monde overworld
                 Utils.saveInv(player, currentWorld);

@@ -30,8 +30,8 @@ import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 public abstract class EndPortalBlockMixin {
 
     @Inject(at = @At("HEAD"), method = "onEntityCollision", cancellable = true)
-    public void onEntityCollision(BlockState state, World world, BlockPos pos, Entity entity, EntityCollisionHandler handler, CallbackInfo ci) {
-        if (!isWorldWithEnd(entity.getWorld().getRegistryKey())) {
+    public void onEntityCollision(BlockState state, World world, BlockPos pos, Entity entity, EntityCollisionHandler handler, boolean bl, CallbackInfo ci) {
+        if (!isWorldWithEnd(entity.getEntityWorld().getRegistryKey())) {
             ci.cancel();
         }
     }
@@ -64,10 +64,10 @@ public abstract class EndPortalBlockMixin {
 
         if (Objects.equals(currentWorldKey.getValue().getNamespace(), NAMESPACE)) {
             String path = currentWorldKey.getValue().getPath();
-            boolean isEndWorld = !path.endsWith("_end");
+            boolean bl2 = path.endsWith("_end");
 
-            MultiWorld.LOGGER.info("Modified END flag for {} : {}", path, isEndWorld);
-            return isEndWorld;
+            MultiWorld.LOGGER.info("Modified END flag for {} : {}", path, bl2);
+            return bl2;
         }
 
         return bl;
@@ -82,7 +82,7 @@ public abstract class EndPortalBlockMixin {
     )
     private ServerWorld redirectGetWorld(net.minecraft.server.MinecraftServer server, RegistryKey<World> registryKey, ServerWorld world, Entity entity, BlockPos pos) {
         ServerWorld targetWorld = server.getWorld(registryKey);
-        ServerWorld initialWorld = entity.getServer().getWorld(entity.getWorld().getRegistryKey());
+        ServerWorld initialWorld = entity.getEntityWorld().getServer().getWorld(entity.getEntityWorld().getRegistryKey());
 
         if (Objects.equals(initialWorld.getRegistryKey().getValue().getNamespace(), NAMESPACE)) {
             String destinationName = getDestinationName(initialWorld);

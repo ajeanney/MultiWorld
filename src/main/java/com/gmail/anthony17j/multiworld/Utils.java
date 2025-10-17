@@ -22,10 +22,12 @@ import net.minecraft.storage.ReadView;
 import net.minecraft.util.ErrorReporter;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.GlobalPos;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.GameMode;
 import net.minecraft.world.TeleportTarget;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldProperties;
 import net.minecraft.world.dimension.DimensionOptions;
 
 import java.io.BufferedWriter;
@@ -43,7 +45,7 @@ public class Utils {
     public static void saveInv(ServerPlayerEntity player, String world) {
         // LOGGER.info("Saving player data for {} in world {}", player.getName().getString(), world);
         try {
-            String worldFolder = player.getServer().getSaveProperties().getLevelName();
+            String worldFolder = player.getEntityWorld().getServer().getSaveProperties().getLevelName();
 
             // create a writer
             if (new File(worldFolder + "/" + NAMESPACE + "/" + world).mkdirs()) {
@@ -68,10 +70,11 @@ public class Utils {
             NbtCompound tag = nbtWriteView.getNbt();
             ServerPlayerEntity.Respawn respawn = player.getRespawn();
             if (respawn != null) {
-                respawnTag.putString("dimension", respawn.dimension().getValue().toString());
+                respawnTag.putString("dimension", respawn.respawnData().getDimension().getValue().toString());
                 respawnTag.putBoolean("forced", respawn.forced());
-                respawnTag.putFloat("angle", respawn.angle());
-                respawnTag.putIntArray("pos", new int[]{respawn.pos().getX(), respawn.pos().getY(), respawn.pos().getZ()});
+                respawnTag.putFloat("angle", respawn.respawnData().yaw());
+                respawnTag.putFloat("pitch", respawn.respawnData().pitch());
+                respawnTag.putIntArray("pos", new int[]{respawn.respawnData().getPos().getX(), respawn.respawnData().getPos().getY(), respawn.respawnData().getPos().getZ()});
                 tag.put("respawn", respawnTag);
             }
 
@@ -124,7 +127,7 @@ public class Utils {
     public static void loadInv(ServerPlayerEntity player, String world) {
         // LOGGER.info("Loading player data for {} in world {}", player.getName().getString(), world);
 
-        String worldFolder = player.getServer().getSaveProperties().getLevelName();
+        String worldFolder = player.getEntityWorld().getServer().getSaveProperties().getLevelName();
         ErrorReporter.Logging logging = new ErrorReporter.Logging(player.getErrorReporterContext(), LOGGER);
 
         try (FileReader fileReader = new FileReader(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getUuidAsString() + ".json")) {
@@ -136,12 +139,12 @@ public class Utils {
             ReadView nbtReadView = NbtReadView.create(logging, player.getRegistryManager(), playerNbt);
             player.readData(nbtReadView);
             player.readEnderPearls(nbtReadView);
-            player.readGameModeData(nbtReadView);
+            // player.readGameModeData(nbtReadView);
 
             String[] strArr = playerNbt.getString("Dimension").orElse(World.OVERWORLD.getValue().toString()).split(":");
             RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
             RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
-            ServerWorld dimension = player.getWorld().getServer().getWorld(key);
+            ServerWorld dimension = player.getEntityWorld().getServer().getWorld(key);
 
             // Load respawn position
             // get respawn tag from playerNbt
@@ -154,9 +157,13 @@ public class Utils {
                 RegistryKey<DimensionOptions> respawnDimensionKey = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(dimParts[0], dimParts[1]));
                 RegistryKey<World> respawnDimension = RegistryKey.of(RegistryKeys.WORLD, respawnDimensionKey.getValue());
                 ServerPlayerEntity.Respawn respawn = new ServerPlayerEntity.Respawn(
-                        respawnDimension,
-                        new BlockPos(respawnPos[0], respawnPos[1], respawnPos[2]),
-                        respawnData.getFloat("angle").orElse(0F),
+                        new WorldProperties.SpawnPoint(
+                                new GlobalPos(
+                                        respawnDimension,
+                                        new BlockPos(respawnPos[0], respawnPos[1], respawnPos[2])
+                                ),
+                                respawnData.getFloat("angle").orElse(0F),
+                                respawnData.getFloat("pitch").orElse(0F)),
                         respawnData.getBoolean("forced").orElse(false)
                 );
                 player.setSpawnPoint(respawn, false);
@@ -172,7 +179,7 @@ public class Utils {
                     player.resetStat(stat);
                 }
 
-                statHandler.parse(player.getServer().getDataFixer(), statsData.toJson());
+                statHandler.parse(player.getEntityWorld().getServer().getDataFixer(), statsData.toJson());
                 statHandler.updateStatSet();
             }
 
@@ -184,7 +191,7 @@ public class Utils {
                     advancementsData.toJson().getBytes()
                 );
             }
-            player.getAdvancementTracker().reload(player.getServer().getAdvancementLoader());
+            player.getAdvancementTracker().reload(player.getEntityWorld().getServer().getAdvancementLoader());
 
             player.teleport(
                 dimension,
@@ -204,7 +211,7 @@ public class Utils {
             ReadView nbtReadView = NbtReadView.create(logging, player.getRegistryManager(), playerNbt);
 
             player.readData(nbtReadView);
-            player.readGameModeData(nbtReadView);
+            // player.readGameModeData(nbtReadView);
             player.readEnderPearls(nbtReadView);
 
             player.setSpawnPoint(null, false);
@@ -231,7 +238,7 @@ public class Utils {
             } catch (Exception e) {
                 LOGGER.error("Error writing cleared advancements: {}", e.getMessage());
             }
-            player.getAdvancementTracker().reload(player.getServer().getAdvancementLoader());
+            player.getAdvancementTracker().reload(player.getEntityWorld().getServer().getAdvancementLoader());
 
             // Teleport
             String dimension = world.equals("overworld") ? "minecraft:overworld" : NAMESPACE + ":" + world;
@@ -241,10 +248,10 @@ public class Utils {
             RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
 
             // teleport to world spawn
-            MinecraftServer server = player.getServer();
+            MinecraftServer server = player.getEntityWorld().getServer();
             ServerWorld serverWorld = server.getWorld(key);
 
-            Vec3d worldSpawn = player.getWorldSpawnPos(serverWorld, serverWorld.getSpawnPos()).toBottomCenterPos();
+            Vec3d worldSpawn = player.getWorldSpawnPos(serverWorld, serverWorld.getLevelProperties().getSpawnPoint().getPos()).toBottomCenterPos();
             TeleportTarget teleportTarget = new TeleportTarget(serverWorld, worldSpawn, Vec3d.ZERO, 0.0F, 0.0F, false, false, Set.of(), TeleportTarget.NO_OP);
 
             // player teleport
@@ -257,9 +264,9 @@ public class Utils {
         }
     }
 
-    public static String getMostRecentWorldSaved(ServerPlayerEntity player) {
+    public static String getMostRecentWorldSaved(ServerPlayerEntity player, String sourceWorld) {
         // in the namespace folder, check every folder (world), then inside check the file with the user uuid. The world with the most recent file is the one we want
-        String worldFolder = player.getServer().getSaveProperties().getLevelName();
+        String worldFolder = player.getEntityWorld().getServer().getSaveProperties().getLevelName();
         File folder = new File(worldFolder + "/" + NAMESPACE);
         File[] listOfFiles = folder.listFiles();
         if (listOfFiles != null) {
@@ -270,7 +277,7 @@ public class Utils {
                     File playerFile = new File(file.getPath() + "/" + player.getUuid() + ".json");
                     if (playerFile.exists()) {
                         long lastModified = playerFile.lastModified();
-                        if (lastModified > mostRecentTime) {
+                        if (lastModified > mostRecentTime && !file.getName().equals(sourceWorld)) {
                             mostRecentTime = lastModified;
                             mostRecentWorld = file.getName();
                         }

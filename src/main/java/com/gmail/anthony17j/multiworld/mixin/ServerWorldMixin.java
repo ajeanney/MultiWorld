@@ -1,9 +1,10 @@
 package com.gmail.anthony17j.multiworld.mixin;
 
-import com.gmail.anthony17j.multiworld.CustomServerWorld;
+import net.minecraft.network.packet.Packet;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.WorldGenerationProgressListener;
+import net.minecraft.server.PlayerManager;
+import net.minecraft.server.world.ServerChunkManager;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.util.math.random.RandomSequencesState;
 import net.minecraft.world.World;
@@ -12,6 +13,7 @@ import net.minecraft.world.dimension.DimensionOptions;
 import net.minecraft.world.level.ServerWorldProperties;
 import net.minecraft.world.level.storage.LevelStorage;
 import net.minecraft.world.spawner.SpecialSpawner;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.*;
 import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
@@ -24,7 +26,10 @@ import static com.gmail.anthony17j.multiworld.CustomServerWorld.getMockRegistryK
 import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 @Mixin(ServerWorld.class)
-public class ServerWorldMixin {
+public abstract class ServerWorldMixin {
+
+    @Shadow
+    public abstract ServerChunkManager getChunkManager();
 
     @Redirect(
             method = "<init>",
@@ -65,12 +70,23 @@ public class ServerWorldMixin {
                                  MinecraftServer server, Executor workerExecutor,
                                  LevelStorage.Session session, ServerWorldProperties properties,
                                  RegistryKey<World> worldKey, DimensionOptions dimensionOptions,
-                                 WorldGenerationProgressListener worldGenerationProgressListener,
                                  boolean debugWorld, long seed, List<SpecialSpawner> spawners,
                                  boolean shouldTickTime, RandomSequencesState randomSequencesState) {
         if (Objects.equals(worldKey.getValue().getNamespace(), NAMESPACE)) {
             return seed;
         }
         return instance.getSeed();
+    }
+
+    @Redirect(
+            method = "tickWeather",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/server/PlayerManager;sendToAll(Lnet/minecraft/network/packet/Packet;)V"
+            )
+
+    )
+    private void dontSendRainPacketsToAllWorlds(PlayerManager instance, Packet<?> packet) {
+        instance.sendToDimension(packet, this.getChunkManager().getWorld().getRegistryKey());
     }
 }

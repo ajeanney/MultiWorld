@@ -10,8 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import static com.gmail.anthony17j.multiworld.CustomServerWorld.getRegistryKey;
-import static com.gmail.anthony17j.multiworld.MultiWorld.CREATIVE_WORLD_NAME;
+import static com.gmail.anthony17j.multiworld.CustomServerWorld.isCreativeWorld;
 
 @Mixin(PlayerAdvancementTracker.class)
 public abstract class AdvancementMixin {
@@ -19,21 +18,21 @@ public abstract class AdvancementMixin {
 
     @Inject(at = @At("HEAD"), method = "grantCriterion", cancellable = true)
     public void grantCriterion(AdvancementEntry advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
-        if (this.owner.getWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
+        if (isCreativeWorld(this.owner.getEntityWorld().getRegistryKey())) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "revokeCriterion", cancellable = true)
     public void revokeCriterion(AdvancementEntry advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {
-        if (this.owner.getWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
+        if (isCreativeWorld(this.owner.getEntityWorld().getRegistryKey())) {
             cir.cancel();
         }
     }
 
     @Inject(at = @At("HEAD"), method = "sendUpdate", cancellable = true)
     public void sendUpdate(ServerPlayerEntity player, boolean showToast, CallbackInfo ci) {
-        if (player.getWorld().getRegistryKey() == getRegistryKey(CREATIVE_WORLD_NAME)) {
+        if (isCreativeWorld(player.getEntityWorld().getRegistryKey())) {
             ci.cancel();
         }
     }

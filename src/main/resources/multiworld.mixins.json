@@ -13,17 +13,21 @@
     "EntityMixin",
     "FallingBlockEntityMixin",
     "FeatureUpdaterMixin",
+    "IMinecraftServerMixin",
     "MapStateMixin",
-    "MinecraftDedicatedServerMixin",
     "MinecraftServerMixin",
     "NetherPortalBlockMixin",
     "ServerPlayerEntityMixin",
     "ServerWorldAccessor",
     "ServerWorldMixin",
     "SimpleRegistryMixin",
-    "StatHandlerAccessor"
+    "StatHandlerAccessor",
+    "TeleportTargetMixin"
   ],
   "injectors": {
     "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
   }
 }

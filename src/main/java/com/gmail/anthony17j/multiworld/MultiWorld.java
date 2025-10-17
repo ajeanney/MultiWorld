@@ -4,7 +4,7 @@ import com.github.cliftonlabs.json_simple.JsonObject;
 import com.github.cliftonlabs.json_simple.Jsoner;
 import com.gmail.anthony17j.multiworld.command.CreativeCommand;
 import com.gmail.anthony17j.multiworld.command.MultiWorldCommand;
-import com.gmail.anthony17j.multiworld.mixin.MinecraftServerMixin;
+import com.gmail.anthony17j.multiworld.mixin.IMinecraftServerMixin;
 import com.gmail.anthony17j.multiworld.mixin.ServerWorldAccessor;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -25,8 +25,10 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.ProgressListener;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.GlobalPos;
 import net.minecraft.world.GameMode;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldProperties;
 import net.minecraft.world.biome.Biome;
 import net.minecraft.world.biome.BiomeKeys;
 import net.minecraft.world.biome.source.MultiNoiseBiomeSource;
@@ -74,28 +76,43 @@ public class MultiWorld implements ModInitializer {
             loadCustomWorlds(server);
 
             // Créer le monde créatif par défaut s'il n'existe pas déjà
-            createWorld(
-                    server,
-                    CREATIVE_WORLD_NAME,
-                    DEFAULT_DIM_TYPE,
-                    new FlatChunkGenerator(
-                            new FlatChunkGeneratorConfig(
-                                    Optional.empty(),
-                                    null,
-                                    List.of()
-                            ).with(
-                                    List.of(
-                                            new FlatChunkGeneratorLayer(1, Blocks.BEDROCK),
-                                            new FlatChunkGeneratorLayer(61, Blocks.DIRT),
-                                            new FlatChunkGeneratorLayer(1, Blocks.GRASS_BLOCK)
-                                    ),
-                                    Optional.empty(),
-                                    server.getRegistryManager().getOrThrow(RegistryKeys.BIOME).getOrThrow(BiomeKeys.THE_VOID)
-                            )
-                    ),
-                    BlockPos.ORIGIN,
-                    GameMode.CREATIVE
-            );
+            createWorld(server, CREATIVE_WORLD_NAME, DEFAULT_DIM_TYPE, new FlatChunkGenerator(
+                    new FlatChunkGeneratorConfig(
+                            Optional.empty(),
+                            null,
+                            List.of()
+                    ).with(
+                            List.of(
+                                    new FlatChunkGeneratorLayer(1, Blocks.BEDROCK),
+                                    new FlatChunkGeneratorLayer(61, Blocks.DIRT),
+                                    new FlatChunkGeneratorLayer(1, Blocks.GRASS_BLOCK)
+                            ),
+                            Optional.empty(),
+                            server.getRegistryManager().getOrThrow(RegistryKeys.BIOME).getOrThrow(BiomeKeys.THE_VOID)
+                    )
+            ), BlockPos.ORIGIN, GameMode.CREATIVE);
+            createWorld(server, CREATIVE_WORLD_NAME + "_nether", DimensionTypes.THE_NETHER, new FlatChunkGenerator(
+                    new FlatChunkGeneratorConfig(
+                            Optional.empty(),
+                            null,
+                            List.of()
+                    ).with(
+                            List.of(),
+                            Optional.empty(),
+                            server.getRegistryManager().getOrThrow(RegistryKeys.BIOME).getOrThrow(BiomeKeys.NETHER_WASTES)
+                    )
+            ), BlockPos.ORIGIN, GameMode.CREATIVE);
+            createWorld(server, CREATIVE_WORLD_NAME + "_end", DimensionTypes.THE_END, new FlatChunkGenerator(
+                    new FlatChunkGeneratorConfig(
+                            Optional.empty(),
+                            null,
+                            List.of()
+                    ).with(
+                            List.of(),
+                            Optional.empty(),
+                            server.getRegistryManager().getOrThrow(RegistryKeys.BIOME).getOrThrow(BiomeKeys.THE_END)
+                    )
+            ), BlockPos.ORIGIN, GameMode.CREATIVE);
         });
     }
 
@@ -645,12 +662,12 @@ public class MultiWorld implements ModInitializer {
             ((ServerWorldAccessor) addedWorld).getWorldProperties().setGameMode(gameMode);
         }
 
-        ((MinecraftServerMixin) server).getWorlds().put(addedWorld.getRegistryKey(), addedWorld);
+        ((IMinecraftServerMixin) server).getWorlds().put(addedWorld.getRegistryKey(), addedWorld);
 
         if (spawnPos != null) {
-            newLevelProperties.setSpawnPos(spawnPos, 0.0F);
+            newLevelProperties.setSpawnPoint(new WorldProperties.SpawnPoint(new GlobalPos(worldKey, spawnPos), 0.0F, 0.0F));
         } else {
-            MinecraftServerMixin.invokeSetupSpawn(addedWorld, newLevelProperties, false, false);
+            IMinecraftServerMixin.invokeSetupSpawn(addedWorld, newLevelProperties, false, false, server.getChunkLoadProgress());
         }
 
         ServerWorldEvents.LOAD.invoker().onWorldLoad(server, addedWorld);
@@ -672,7 +689,7 @@ public class MultiWorld implements ModInitializer {
     private static void unload(MinecraftServer server, ServerWorld world) {
         RegistryKey<World> dimensionKey = world.getRegistryKey();
 
-        if (((MinecraftServerMixin) server).getWorlds().remove(dimensionKey, world)) {
+        if (((IMinecraftServerMixin) server).getWorlds().remove(dimensionKey, world)) {
             world.save(new ProgressListener() {
                 @Override
                 public void setTitle(Text title) {}
@@ -749,19 +766,19 @@ public class MultiWorld implements ModInitializer {
         // Supprimer les fichiers des dimensions
         if (overworld != null) {
             deleteWorldFiles(serverWorldFolder, overWorldKey);
-            ((MinecraftServerMixin) server).getWorlds().remove(overWorldKey);
+            ((IMinecraftServerMixin) server).getWorlds().remove(overWorldKey);
         }
 
         // Supprimer les fichiers du nether s'il existe
         if (nether != null) {
             deleteWorldFiles(serverWorldFolder, netherWorldKey);
-            ((MinecraftServerMixin) server).getWorlds().remove(netherWorldKey);
+            ((IMinecraftServerMixin) server).getWorlds().remove(netherWorldKey);
         }
 
         // Supprimer les fichiers de l'end s'il existe
         if (end != null) {
             deleteWorldFiles(serverWorldFolder, endWorldKey);
-            ((MinecraftServerMixin) server).getWorlds().remove(endWorldKey);
+            ((IMinecraftServerMixin) server).getWorlds().remove(endWorldKey);
         }
 
         // Supprimer les données des joueurs liées à ce monde
