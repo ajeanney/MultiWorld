@@ -1,11 +1,11 @@
 package com.gmail.anthony17j.multiworld;
 
-import net.minecraft.registry.SimpleRegistry;
-import net.minecraft.util.Identifier;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.resources.Identifier;
 
 public interface CustomSimpleRegistry<T> {
 
-    static <T> boolean remove(SimpleRegistry<T> registry, Identifier key) {
+    static <T> boolean remove(MappedRegistry<T> registry, Identifier key) {
         return ((CustomSimpleRegistry<T>) registry).multiWorld$remove(key);
     }
 
