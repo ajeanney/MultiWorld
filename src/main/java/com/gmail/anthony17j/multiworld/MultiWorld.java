@@ -5,41 +5,48 @@ import com.github.cliftonlabs.json_simple.Jsoner;
 import com.gmail.anthony17j.multiworld.command.CreativeCommand;
 import com.gmail.anthony17j.multiworld.command.MultiWorldCommand;
 import com.gmail.anthony17j.multiworld.mixin.IMinecraftServerMixin;
-import com.gmail.anthony17j.multiworld.mixin.ServerWorldAccessor;
+import com.gmail.anthony17j.multiworld.mixin.ServerLevelAccessor;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
-import net.minecraft.block.Block;
-import net.minecraft.block.Blocks;
-import net.minecraft.nbt.NbtCompound;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.Holder;
+import net.minecraft.core.MappedRegistry;
+import net.minecraft.core.RegistrationInfo;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtSizeTracker;
-import net.minecraft.registry.*;
-import net.minecraft.registry.entry.RegistryEntry;
-import net.minecraft.registry.entry.RegistryEntryInfo;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProgressListener;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.GlobalPos;
-import net.minecraft.world.GameMode;
-import net.minecraft.world.World;
-import net.minecraft.world.WorldProperties;
-import net.minecraft.world.biome.Biome;
-import net.minecraft.world.biome.BiomeKeys;
-import net.minecraft.world.biome.source.MultiNoiseBiomeSource;
-import net.minecraft.world.biome.source.MultiNoiseBiomeSourceParameterList;
-import net.minecraft.world.biome.source.MultiNoiseBiomeSourceParameterLists;
-import net.minecraft.world.biome.source.TheEndBiomeSource;
-import net.minecraft.world.dimension.DimensionOptions;
-import net.minecraft.world.dimension.DimensionType;
-import net.minecraft.world.dimension.DimensionTypes;
-import net.minecraft.world.gen.chunk.*;
-import net.minecraft.world.level.LevelProperties;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.biome.Biome;
+import net.minecraft.world.level.biome.Biomes;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
+import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterLists;
+import net.minecraft.world.level.biome.TheEndBiomeSource;
+import net.minecraft.world.level.chunk.ChunkGenerator;
+import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+import net.minecraft.world.level.dimension.DimensionType;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
+import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.flat.FlatLayerInfo;
+import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
+import net.minecraft.world.level.levelgen.FlatLevelSource;
+import net.minecraft.world.level.storage.LevelData;
+import net.minecraft.world.level.storage.PrimaryLevelData;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,7 +68,7 @@ public class MultiWorld implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MultiWorld.class);
 
     public static final String NAMESPACE = "multiworld";
-    public static final RegistryKey<DimensionType> DEFAULT_DIM_TYPE = RegistryKey.of(RegistryKeys.DIMENSION_TYPE, Identifier.of(NAMESPACE, "default"));
+    public static final ResourceKey<DimensionType> DEFAULT_DIM_TYPE = ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.fromNamespaceAndPath(NAMESPACE, "default"));
 
     public static final String CREATIVE_WORLD_NAME = "creative";
     private static final String CONFIG_FILE_NAME = "multiworld.dat";
@@ -69,126 +76,100 @@ public class MultiWorld implements ModInitializer {
     @Override
     public void onInitialize() {
         CommandRegistrationCallback.EVENT.register(CreativeCommand::register);
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> MultiWorldCommand.register(dispatcher));
+        CommandRegistrationCallback.EVENT.register(MultiWorldCommand::register);
 
         ServerLifecycleEvents.SERVER_STARTED.register((MinecraftServer server) -> {
-            // Charger les mondes personnalisés à partir des fichiers de configuration
             loadCustomWorlds(server);
 
-            // Créer le monde créatif par défaut s'il n'existe pas déjà
-            createWorld(server, CREATIVE_WORLD_NAME, DEFAULT_DIM_TYPE, new FlatChunkGenerator(
-                    new FlatChunkGeneratorConfig(
-                            Optional.empty(),
-                            null,
-                            List.of()
-                    ).with(
-                            List.of(
-                                    new FlatChunkGeneratorLayer(1, Blocks.BEDROCK),
-                                    new FlatChunkGeneratorLayer(61, Blocks.DIRT),
-                                    new FlatChunkGeneratorLayer(1, Blocks.GRASS_BLOCK)
-                            ),
-                            Optional.empty(),
-                            server.getRegistryManager().getOrThrow(RegistryKeys.BIOME).getOrThrow(BiomeKeys.THE_VOID)
-                    )
-            ), BlockPos.ORIGIN, GameMode.CREATIVE);
-            createWorld(server, CREATIVE_WORLD_NAME + "_nether", DimensionTypes.THE_NETHER, new FlatChunkGenerator(
-                    new FlatChunkGeneratorConfig(
-                            Optional.empty(),
-                            null,
-                            List.of()
-                    ).with(
-                            List.of(),
-                            Optional.empty(),
-                            server.getRegistryManager().getOrThrow(RegistryKeys.BIOME).getOrThrow(BiomeKeys.NETHER_WASTES)
-                    )
-            ), BlockPos.ORIGIN, GameMode.CREATIVE);
-            createWorld(server, CREATIVE_WORLD_NAME + "_end", DimensionTypes.THE_END, new FlatChunkGenerator(
-                    new FlatChunkGeneratorConfig(
-                            Optional.empty(),
-                            null,
-                            List.of()
-                    ).with(
-                            List.of(),
-                            Optional.empty(),
-                            server.getRegistryManager().getOrThrow(RegistryKeys.BIOME).getOrThrow(BiomeKeys.THE_END)
-                    )
-            ), BlockPos.ORIGIN, GameMode.CREATIVE);
+            Holder<Biome> voidBiome = server.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_VOID);
+            Holder<Biome> netherBiome = server.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.NETHER_WASTES);
+            Holder<Biome> endBiome = server.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_END);
+
+            createWorld(server, CREATIVE_WORLD_NAME, BuiltinDimensionTypes.OVERWORLD, new FlatLevelSource(
+                    new FlatLevelGeneratorSettings(Optional.empty(), voidBiome, List.of())
+                            .withBiomeAndLayers(
+                                    List.of(
+                                            new FlatLayerInfo(1, Blocks.BEDROCK),
+                                            new FlatLayerInfo(61, Blocks.DIRT),
+                                            new FlatLayerInfo(1, Blocks.GRASS_BLOCK)
+                                    ),
+                                    Optional.empty(),
+                                    voidBiome
+                            )
+            ), BlockPos.ZERO, GameType.CREATIVE);
+            createWorld(server, CREATIVE_WORLD_NAME + "_nether", BuiltinDimensionTypes.NETHER, new FlatLevelSource(
+                    new FlatLevelGeneratorSettings(Optional.empty(), netherBiome, List.of())
+                            .withBiomeAndLayers(List.of(), Optional.empty(), netherBiome)
+            ), BlockPos.ZERO, GameType.CREATIVE);
+            createWorld(server, CREATIVE_WORLD_NAME + "_end", BuiltinDimensionTypes.END, new FlatLevelSource(
+                    new FlatLevelGeneratorSettings(Optional.empty(), endBiome, List.of())
+                            .withBiomeAndLayers(List.of(), Optional.empty(), endBiome)
+            ), BlockPos.ZERO, GameType.CREATIVE);
         });
     }
 
     private static void loadCustomWorlds(MinecraftServer server) {
-        String serverWorldFolder = server.getSaveProperties().getLevelName();
+        String serverWorldFolder = server.getWorldData().getLevelName();
         File dimensionsFolder = new File(serverWorldFolder + "/dimensions/" + NAMESPACE);
-        
+
         if (!dimensionsFolder.exists() || !dimensionsFolder.isDirectory()) {
             LOGGER.info("No custom dimensions found.");
             return;
         }
-        
-        // Parcourir tous les dossiers de dimensions
+
         File[] worldFolders = dimensionsFolder.listFiles(File::isDirectory);
-        
+
         if (worldFolders == null || worldFolders.length == 0) {
             LOGGER.info("No custom worlds found in dimensions folder.");
             return;
         }
-        
+
         for (File worldFolder : worldFolders) {
             String worldName = worldFolder.getName();
-            
-            // Vérifier si le monde est déjà chargé correctement
-            RegistryKey<World> worldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName));
-            ServerWorld existingWorld = server.getWorld(worldKey);
-            
+
+            ResourceKey<Level> worldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
+            ServerLevel existingWorld = server.getLevel(worldKey);
+
             if (existingWorld instanceof CustomServerWorld) {
                 LOGGER.info("World '{}' already loaded correctly as CustomServerWorld", worldName);
                 continue;
             }
-            
-            // Si le monde existe mais n'est pas une CustomServerWorld, on décharge d'abord
+
             if (existingWorld != null) {
                 unload(server, existingWorld);
             }
-            
-            // Chercher le fichier de configuration
+
             File dataFolder = new File(worldFolder, "data");
             File configFile = new File(dataFolder, CONFIG_FILE_NAME);
-            
+
             if (!configFile.exists()) {
                 LOGGER.warn("Config file not found for world '{}', skipping", worldName);
                 continue;
             }
-            
-            try {
-                // Charger la configuration
-                NbtCompound configNbt = NbtIo.readCompressed(configFile.toPath(), NbtSizeTracker.ofUnlimitedBytes());
-                
-                // Extraire les informations de configuration
-                long seed = configNbt.getLong("seed").orElseThrow();
 
-                RegistryKey<DimensionType> dimensionType = getDimensionTypeFromString(configNbt.getString("dimensionType").orElseThrow());
+            try {
+                CompoundTag configNbt = NbtIo.readCompressed(configFile.toPath(), NbtAccounter.unlimitedHeap());
+
+                long seed = configNbt.getLong("seed").orElseThrow();
+                ResourceKey<DimensionType> dimensionType = getDimensionTypeFromString(configNbt.getString("dimensionType").orElseThrow());
                 String generatorType = configNbt.getString("generatorType").orElse("overworld");
 
-                // Créer le générateur en fonction du type
                 ChunkGenerator generator = createGeneratorFromType(server, generatorType, configNbt);
 
-                // Récupérer la position de spawn si présente
                 BlockPos spawnPos = null;
                 if (configNbt.contains("spawnPos")) {
                     int[] spawnPosArray = configNbt.getIntArray("spawnPos").orElse(new int[]{0, 64, 0});
                     spawnPos = new BlockPos(spawnPosArray[0], spawnPosArray[1], spawnPosArray[2]);
                 }
 
-                // Récupérer le mode de jeu si présent
-                GameMode gameMode = null;
+                GameType gameMode = null;
                 if (configNbt.contains("gameMode")) {
                     int gameModeIndex = configNbt.getInt("gameMode").orElse(0);
-                    gameMode = GameMode.byIndex(gameModeIndex);
+                    gameMode = GameType.byId(gameModeIndex);
                 }
-                
-                // Créer le monde
+
                 createWorld(server, worldName, dimensionType, generator, seed, spawnPos, gameMode);
-                
+
             } catch (Exception e) {
                 LOGGER.error("Failed to load world '{}': {}", worldName, e.getMessage());
                 e.printStackTrace();
@@ -196,76 +177,68 @@ public class MultiWorld implements ModInitializer {
         }
     }
 
-    private static RegistryKey<DimensionType> getDimensionTypeFromString(String dimensionTypeString) {
+    private static ResourceKey<DimensionType> getDimensionTypeFromString(String dimensionTypeString) {
         if (dimensionTypeString == null || dimensionTypeString.isEmpty()) {
-            return DimensionTypes.OVERWORLD;
+            return BuiltinDimensionTypes.OVERWORLD;
         }
-        
+
         String[] parts = dimensionTypeString.split(":");
         if (parts.length != 2) {
-            return DimensionTypes.OVERWORLD;
+            return BuiltinDimensionTypes.OVERWORLD;
         }
-        
-        return RegistryKey.of(RegistryKeys.DIMENSION_TYPE, Identifier.of(parts[0], parts[1]));
+
+        return ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.fromNamespaceAndPath(parts[0], parts[1]));
     }
 
     private static void saveWorldConfig(
             MinecraftServer server,
             String worldString,
-            RegistryKey<DimensionType> dimensionType,
+            ResourceKey<DimensionType> dimensionType,
             ChunkGenerator generator,
             String generatorType,
             long seed,
             BlockPos spawnPos,
-            GameMode gameMode
+            GameType gameMode
     ) {
-        String serverWorldFolder = server.getSaveProperties().getLevelName();
+        String serverWorldFolder = server.getWorldData().getLevelName();
         String dimensionPath = serverWorldFolder + "/dimensions/" + NAMESPACE + "/" + worldString + "/data";
         File dimensionDataDir = new File(dimensionPath);
-        
+
         if (!dimensionDataDir.exists() && !dimensionDataDir.mkdirs()) {
             LOGGER.error("Could not create data directory for world '{}'", worldString);
             return;
         }
-        
-        File configFile = new File(dimensionDataDir, CONFIG_FILE_NAME);
-        
-        try {
-            // Créer le NBT avec les informations de configuration
-            NbtCompound configNbt = new NbtCompound();
-            configNbt.putString("dimensionType", dimensionType.getValue().toString());
-            configNbt.putLong("seed", seed);
 
-            // Déterminer et sauvegarder le type de générateur
+        File configFile = new File(dimensionDataDir, CONFIG_FILE_NAME);
+
+        try {
+            CompoundTag configNbt = new CompoundTag();
+            configNbt.putString("dimensionType", dimensionType.identifier().toString());
+            configNbt.putLong("seed", seed);
             configNbt.putString("generatorType", generatorType);
 
-            // Sauvegarder les configurations spécifiques au générateur plat
-            if (generatorType.equals("flat") && generator instanceof FlatChunkGenerator flatGenerator) {
-                FlatChunkGeneratorConfig flatConfig = flatGenerator.getConfig();
+            if (generatorType.equals("flat") && generator instanceof FlatLevelSource flatGenerator) {
+                FlatLevelGeneratorSettings flatConfig = flatGenerator.settings();
 
-                // Sauvegarder les couches
-                NbtCompound flatConfigNbt = new NbtCompound();
-                List<FlatChunkGeneratorLayer> layers = flatConfig.getLayers();
-                NbtCompound[] layersNbt = new NbtCompound[layers.size()];
+                CompoundTag flatConfigNbt = new CompoundTag();
+                List<FlatLayerInfo> layers = flatConfig.getLayersInfo();
+                CompoundTag[] layersNbt = new CompoundTag[layers.size()];
 
                 for (int i = 0; i < layers.size(); i++) {
-                    FlatChunkGeneratorLayer layer = layers.get(i);
-                    NbtCompound layerNbt = new NbtCompound();
-                    layerNbt.putInt("height", layer.getThickness());
-                    layerNbt.putString("block", RegistryKey.of(RegistryKeys.BLOCK, layer.getBlockState().getBlock().getRegistryEntry().getKey().orElseThrow().getValue()).getValue().toString());
+                    FlatLayerInfo layer = layers.get(i);
+                    CompoundTag layerNbt = new CompoundTag();
+                    layerNbt.putInt("height", layer.getHeight());
+                    layerNbt.putString("block", layer.getBlockState().getBlock().builtInRegistryHolder().key().identifier().toString());
                     layersNbt[i] = layerNbt;
                 }
 
-                NbtCompound layersCompound = new NbtCompound();
+                CompoundTag layersCompound = new CompoundTag();
                 for (int i = 0; i < layersNbt.length; i++) {
                     layersCompound.put("layer" + i, layersNbt[i]);
                 }
                 layersCompound.putInt("count", layersNbt.length);
                 flatConfigNbt.put("layers", layersCompound);
-
-                // Sauvegarder le biome
-                flatConfigNbt.putString("biome", flatConfig.getBiome().getKey().orElseThrow().getValue().toString());
-
+                flatConfigNbt.putString("biome", flatConfig.getBiome().unwrapKey().map(k -> k.identifier().toString()).orElseThrow());
                 configNbt.put("flatConfig", flatConfigNbt);
             }
 
@@ -274,38 +247,33 @@ public class MultiWorld implements ModInitializer {
             }
 
             if (gameMode != null) {
-                configNbt.putInt("gameMode", gameMode.getIndex());
+                configNbt.putInt("gameMode", gameMode.getId());
             }
-            
-            // Sauvegarder le NBT dans un fichier
+
             NbtIo.writeCompressed(configNbt, configFile.toPath());
         } catch (IOException e) {
             LOGGER.error("Failed to save world configuration for '{}': {}", worldString, e.getMessage());
         }
     }
 
-    private static ChunkGenerator createGeneratorFromType(MinecraftServer server, String generatorType, NbtCompound configNbt) {
-        RegistryEntryLookup<ChunkGeneratorSettings> chunkGeneratorSettingsLookup =
-            server.getRegistryManager().getOrThrow(RegistryKeys.CHUNK_GENERATOR_SETTINGS);
-        RegistryEntryLookup<MultiNoiseBiomeSourceParameterList> multiNoisePresetLookup =
-            server.getRegistryManager().getOrThrow(RegistryKeys.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
-        RegistryEntryLookup<Biome> biomeLookup =
-            server.getRegistryManager().getOrThrow(RegistryKeys.BIOME);
+    private static ChunkGenerator createGeneratorFromType(MinecraftServer server, String generatorType, CompoundTag configNbt) {
+        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
+        var multiNoiseLookup = server.registryAccess().lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
+        var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
 
         return switch (generatorType) {
-            case "nether" -> server.getWorld(World.NETHER).getChunkManager().getChunkGenerator();
-            case "end" -> server.getWorld(World.END).getChunkManager().getChunkGenerator();
+            case "nether" -> server.getLevel(Level.NETHER).getChunkSource().getGenerator();
+            case "end" -> server.getLevel(Level.END).getChunkSource().getGenerator();
             case "flat" -> {
-                // Reconstruire le générateur plat à partir des configurations sauvegardées
                 if (configNbt.contains("flatConfig")) {
                     try {
-                        NbtCompound flatConfigNbt = configNbt.getCompound("flatConfig").orElseThrow();
-                        NbtCompound layersCompound = flatConfigNbt.getCompound("layers").orElseThrow();
+                        CompoundTag flatConfigNbt = configNbt.getCompound("flatConfig").orElseThrow();
+                        CompoundTag layersCompound = flatConfigNbt.getCompound("layers").orElseThrow();
                         int layerCount = layersCompound.getInt("count").orElse(0);
 
-                        List<FlatChunkGeneratorLayer> layers = new ArrayList<>();
+                        List<FlatLayerInfo> layers = new ArrayList<>();
                         for (int i = 0; i < layerCount; i++) {
-                            NbtCompound layerNbt = layersCompound.getCompound("layer" + i).orElseThrow();
+                            CompoundTag layerNbt = layersCompound.getCompound("layer" + i).orElseThrow();
                             int thickness = layerNbt.getInt("height").orElseThrow();
                             String blockId = layerNbt.getString("block").orElseThrow();
                             Identifier blockIdentifier = Identifier.tryParse(blockId);
@@ -313,51 +281,41 @@ public class MultiWorld implements ModInitializer {
                                 throw new IllegalArgumentException("Invalid block identifier: " + blockId);
                             }
 
-                            Block block = server.getRegistryManager().getOrThrow(RegistryKeys.BLOCK).get(blockIdentifier);
-                            layers.add(new FlatChunkGeneratorLayer(thickness, block));
+                            Block block = server.registryAccess().lookupOrThrow(Registries.BLOCK).getOrThrow(ResourceKey.create(Registries.BLOCK, blockIdentifier)).value();
+                            layers.add(new FlatLayerInfo(thickness, block));
                         }
 
-                        // Récupérer le biome
                         String biomeId = flatConfigNbt.getString("biome").orElse("minecraft:plains");
                         Identifier biomeIdentifier = Identifier.tryParse(biomeId);
-                        RegistryEntry<Biome> biome = biomeLookup.getOrThrow(RegistryKey.of(RegistryKeys.BIOME, biomeIdentifier));
+                        Holder<Biome> biome = biomeLookup.getOrThrow(ResourceKey.create(Registries.BIOME, biomeIdentifier));
 
-                        // Créer le générateur plat
-                        FlatChunkGeneratorConfig flatConfig = new FlatChunkGeneratorConfig(
-                                Optional.empty(),
-                                biome,
-                                null
-                        ).with(layers, Optional.empty(), biome);
-
-                        yield new FlatChunkGenerator(flatConfig);
+                        yield new FlatLevelSource(
+                                new FlatLevelGeneratorSettings(Optional.empty(), biome, List.of())
+                                        .withBiomeAndLayers(layers, Optional.empty(), biome)
+                        );
                     } catch (Exception e) {
                         LOGGER.error("Error reconstructing flat generator: {}", e.getMessage());
                         e.printStackTrace();
                     }
                 }
-                // Fallback vers un générateur plat par défaut
-                yield new FlatChunkGenerator(
-                        new FlatChunkGeneratorConfig(
-                                Optional.empty(),
-                                null,
-                                List.of()
-                        ).with(
-                                List.of(
-                                        new FlatChunkGeneratorLayer(1, Blocks.BEDROCK),
-                                        new FlatChunkGeneratorLayer(61, Blocks.DIRT),
-                                        new FlatChunkGeneratorLayer(1, Blocks.GRASS_BLOCK)
-                                ),
-                                Optional.empty(),
-                                biomeLookup.getOrThrow(BiomeKeys.PLAINS)
-                        )
+                Holder<Biome> plainsBiome = biomeLookup.getOrThrow(Biomes.PLAINS);
+                yield new FlatLevelSource(
+                        new FlatLevelGeneratorSettings(Optional.empty(), plainsBiome, List.of())
+                                .withBiomeAndLayers(
+                                        List.of(
+                                                new FlatLayerInfo(1, Blocks.BEDROCK),
+                                                new FlatLayerInfo(61, Blocks.DIRT),
+                                                new FlatLayerInfo(1, Blocks.GRASS_BLOCK)
+                                        ),
+                                        Optional.empty(),
+                                        plainsBiome
+                                )
                 );
-                // Fallback vers un générateur plat par défaut
             }
-            default -> server.getOverworld().getChunkManager().getChunkGenerator();
+            default -> server.overworld().getChunkSource().getGenerator();
         };
     }
 
-    // Rendre la méthode importWorld publique
     public static void importWorld(MinecraftServer server, String worldFolderPath, String worldName) {
         LOGGER.info("Importing world from {} to multiworld:{}", worldFolderPath, worldName);
 
@@ -368,59 +326,45 @@ public class MultiWorld implements ModInitializer {
         }
 
         try {
-            // Récupérer les données du level.dat
             File levelDatFile = new File(sourceWorldFolder, "level.dat");
             if (!levelDatFile.exists()) {
                 LOGGER.error("level.dat not found in {}", worldFolderPath);
                 return;
             }
 
-            // Lire le fichier level.dat pour obtenir la seed
-            NbtCompound levelData = NbtIo.readCompressed(levelDatFile.toPath(), NbtSizeTracker.ofUnlimitedBytes());
-            NbtCompound dataTag = levelData.getCompound("Data").orElseThrow();
-            NbtCompound worldGenSettings = dataTag.getCompound("WorldGenSettings").orElseThrow();
+            CompoundTag levelData = NbtIo.readCompressed(levelDatFile.toPath(), NbtAccounter.unlimitedHeap());
+            CompoundTag dataTag = levelData.getCompound("Data").orElseThrow();
+            CompoundTag worldGenSettings = dataTag.getCompound("WorldGenSettings").orElseThrow();
             long seed = worldGenSettings.getLong("seed").orElseThrow();
             LOGGER.info("Seed from world: {}", seed);
 
-            // Préparer les chemins de destination
-            String serverWorldFolder = server.getSaveProperties().getLevelName();
+            String serverWorldFolder = server.getWorldData().getLevelName();
 
-            // Définir les clés de registre pour les dimensions
-            RegistryKey<World> overWorldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName));
-            RegistryKey<World> netherWorldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName + "_nether"));
-            RegistryKey<World> endWorldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName + "_end"));
+            ResourceKey<Level> overWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
+            ResourceKey<Level> netherWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_nether"));
+            ResourceKey<Level> endWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_end"));
 
-            // Préparer les dossiers et copier les fichiers AVANT de créer les mondes
-            // Overworld
             copyWorldFiles(sourceWorldFolder, serverWorldFolder, overWorldKey);
 
-            // Nether
             File netherFolder = new File(sourceWorldFolder, "DIM-1");
             if (netherFolder.exists()) {
                 copyWorldFiles(netherFolder, serverWorldFolder, netherWorldKey);
             }
 
-            // End
             File endFolder = new File(sourceWorldFolder, "DIM1");
             if (endFolder.exists()) {
                 copyWorldFiles(endFolder, serverWorldFolder, endWorldKey);
             }
 
-            // Créer les mondes (overworld, nether, end) avec la même seed
-            // Les fichiers sont déjà copiés à ce stade
             createWorldWithDimensions(server, worldName, seed);
 
-            // Obtenir les références aux nouveaux mondes
-            ServerWorld overworld = server.getWorld(overWorldKey);
-            ServerWorld nether = server.getWorld(netherWorldKey);
-            ServerWorld end = server.getWorld(endWorldKey);
+            ServerLevel overworld = server.getLevel(overWorldKey);
 
             if (overworld == null) {
                 LOGGER.error("Failed to create overworld dimension");
                 return;
             }
 
-            // Créer le dossier multiworld/worldName pour stocker les données des joueurs
             File multiworldFolder = new File(serverWorldFolder, NAMESPACE);
             if (!multiworldFolder.exists() && !multiworldFolder.mkdirs()) {
                 LOGGER.error("Could not create multiworld directory");
@@ -433,33 +377,26 @@ public class MultiWorld implements ModInitializer {
                 return;
             }
 
-            // Traiter les données des joueurs
             File playerDataFolder = new File(sourceWorldFolder, "playerdata");
             if (playerDataFolder.exists() && playerDataFolder.isDirectory()) {
                 File[] playerDataFiles = playerDataFolder.listFiles((dir, name) -> name.endsWith(".dat"));
                 if (playerDataFiles != null) {
                     for (File playerDataFile : playerDataFiles) {
                         try {
-                            // Lire les données du joueur
-                            NbtCompound playerData = NbtIo.readCompressed(playerDataFile.toPath(), NbtSizeTracker.ofUnlimitedBytes());
+                            CompoundTag playerData = NbtIo.readCompressed(playerDataFile.toPath(), NbtAccounter.unlimitedHeap());
 
                             String uuid = playerDataFile.getName().replace(".dat", "");
 
-                            // Mettre à jour le tag respawn dimension
                             updateDimensionInTag(playerData, "respawn", worldName);
 
-                            // Mettre à jour le tag Dimension directement dans les données du joueur
-                            String dimensionTagString = playerData.getString("Dimension").orElse(World.OVERWORLD.getValue().toString());
+                            String dimensionTagString = playerData.getString("Dimension").orElse(Level.OVERWORLD.identifier().toString());
                             playerData.putString("Dimension", convertDimensionName(dimensionTagString, worldName));
 
-                            // Mettre à jour le tag LastDeathLocation dimension
                             updateDimensionInTag(playerData, "LastDeathLocation", worldName);
 
-                            // Convertir en JSON
                             JsonObject playerJson = new JsonObject();
                             playerJson.put("player", playerData.toString());
 
-                            // Ajouter les statistiques si elles existent
                             File statsFile = new File(sourceWorldFolder, "stats/" + uuid + ".json");
                             if (statsFile.exists()) {
                                 try (FileReader statsReader = new FileReader(statsFile)) {
@@ -468,7 +405,6 @@ public class MultiWorld implements ModInitializer {
                                 }
                             }
 
-                            // Ajouter les avancements si ils existent
                             File advancementsFile = new File(sourceWorldFolder, "advancements/" + uuid + ".json");
                             if (advancementsFile.exists()) {
                                 try (FileReader advancementsReader = new FileReader(advancementsFile)) {
@@ -477,7 +413,6 @@ public class MultiWorld implements ModInitializer {
                                 }
                             }
 
-                            // Écrire le fichier JSON
                             try (BufferedWriter writer = Files.newBufferedWriter(
                                     Paths.get(worldNameFolder.getPath(), uuid + ".json"))) {
                                 Jsoner.serialize(playerJson, writer);
@@ -498,11 +433,11 @@ public class MultiWorld implements ModInitializer {
         }
     }
 
-    private static void updateDimensionInTag(NbtCompound parentTag, String tagName, String worldName) {
-        Optional<NbtCompound> tagOpt = parentTag.getCompound(tagName);
+    private static void updateDimensionInTag(CompoundTag parentTag, String tagName, String worldName) {
+        Optional<CompoundTag> tagOpt = parentTag.getCompound(tagName);
         if (tagOpt.isPresent()) {
-            NbtCompound tag = tagOpt.get();
-            String dimension = tag.getString("dimension").orElse(World.OVERWORLD.getValue().toString());
+            CompoundTag tag = tagOpt.get();
+            String dimension = tag.getString("dimension").orElse(Level.OVERWORLD.identifier().toString());
             tag.putString("dimension", convertDimensionName(dimension, worldName));
             parentTag.put(tagName, tag);
         }
@@ -520,21 +455,13 @@ public class MultiWorld implements ModInitializer {
         return NAMESPACE + ":" + newDimension;
     }
 
-    private static void copyWorldFiles(File sourceFolder, String serverWorldFolder, RegistryKey<World> worldKey) {
-        // Copier les fichiers de région, POI, entités et données
+    private static void copyWorldFiles(File sourceFolder, String serverWorldFolder, ResourceKey<Level> worldKey) {
         String worldDirectory = serverWorldFolder + "/dimensions/" +
-                worldKey.getValue().getNamespace() + "/" + worldKey.getValue().getPath();
+                worldKey.identifier().getNamespace() + "/" + worldKey.identifier().getPath();
 
-        // Copier les fichiers de région
         copyFilesBeforeWorldCreation(sourceFolder, "region", worldDirectory);
-
-        // Copier les fichiers POI
         copyFilesBeforeWorldCreation(sourceFolder, "poi", worldDirectory);
-
-        // Copier les fichiers d'entités
         copyFilesBeforeWorldCreation(sourceFolder, "entities", worldDirectory);
-
-        // Copier les fichiers de données
         copyFilesBeforeWorldCreation(sourceFolder, "data", worldDirectory);
     }
 
@@ -550,14 +477,12 @@ public class MultiWorld implements ModInitializer {
             return;
         }
 
-        // Créer le dossier de destination s'il n'existe pas
         File destinationFolder = new File(destinationPath + "/" + type);
         if (!destinationFolder.exists() && !destinationFolder.mkdirs()) {
             LOGGER.error("Could not create destination folder: {}", destinationFolder);
             return;
         }
 
-        // Copier les fichiers
         for (File file : files) {
             try {
                 Files.copy(
@@ -574,100 +499,89 @@ public class MultiWorld implements ModInitializer {
     }
 
     public static void createWorldWithDimensions(MinecraftServer server, String worldString, long seed) {
-         RegistryEntryLookup<ChunkGeneratorSettings> chunkGeneratorSettingsLookup = server.getRegistryManager().getOrThrow(RegistryKeys.CHUNK_GENERATOR_SETTINGS);
-         RegistryEntryLookup<MultiNoiseBiomeSourceParameterList> multiNoisePresetLookup = server.getRegistryManager().getOrThrow(RegistryKeys.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
-         RegistryEntryLookup<Biome> biomeLookup = server.getRegistryManager().getOrThrow(RegistryKeys.BIOME);
+        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
+        var multiNoiseLookup = server.registryAccess().lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
+        var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
 
-         ChunkGenerator overworldGenerator = new NoiseChunkGenerator(MultiNoiseBiomeSource.create(multiNoisePresetLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)), chunkGeneratorSettingsLookup.getOrThrow(ChunkGeneratorSettings.OVERWORLD));
-         ChunkGenerator netherGenerator = new NoiseChunkGenerator(MultiNoiseBiomeSource.create(multiNoisePresetLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER)), chunkGeneratorSettingsLookup.getOrThrow(ChunkGeneratorSettings.NETHER));
-         ChunkGenerator endGenerator = new NoiseChunkGenerator(TheEndBiomeSource.createVanilla(biomeLookup), chunkGeneratorSettingsLookup.getOrThrow(ChunkGeneratorSettings.END));
-//
-//         createWorld(server, worldString, DimensionTypes.OVERWORLD, new NoiseChunkGenerator(MultiNoiseBiomeSource.create(multiNoisePresetLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)), chunkGeneratorSettingsLookup.getOrThrow(ChunkGeneratorSettings.OVERWORLD)), seed, null, null);
-//         createWorld(server, worldString + "_nether", DimensionTypes.THE_NETHER, new NoiseChunkGenerator(MultiNoiseBiomeSource.create(multiNoisePresetLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER)), chunkGeneratorSettingsLookup.getOrThrow(ChunkGeneratorSettings.NETHER)), seed, null, null);
-//         createWorld(server, worldString + "_end", DimensionTypes.THE_END, new NoiseChunkGenerator(TheEndBiomeSource.createVanilla(biomeLookup), chunkGeneratorSettingsLookup.getOrThrow(ChunkGeneratorSettings.END)), seed, null, null);
+        ChunkGenerator overworldGenerator = new NoiseBasedChunkGenerator(
+                MultiNoiseBiomeSource.createFromPreset(multiNoiseLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)),
+                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.OVERWORLD));
+        ChunkGenerator netherGenerator = new NoiseBasedChunkGenerator(
+                MultiNoiseBiomeSource.createFromPreset(multiNoiseLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER)),
+                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.NETHER));
+        ChunkGenerator endGenerator = new NoiseBasedChunkGenerator(
+                TheEndBiomeSource.create(biomeLookup),
+                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.END));
 
-
-        // Créer les trois dimensions (Overworld, Nether, End)
-        createWorld(server, worldString, DimensionTypes.OVERWORLD, server.getOverworld().getChunkManager().getChunkGenerator(), seed, null, null);
-        createWorld(server, worldString + "_nether", DimensionTypes.THE_NETHER, server.getWorld(World.NETHER).getChunkManager().getChunkGenerator(), seed, null, null);
-        createWorld(server, worldString + "_end", DimensionTypes.THE_END, server.getWorld(World.END).getChunkManager().getChunkGenerator(), seed, null, null);
+        createWorld(server, worldString, BuiltinDimensionTypes.OVERWORLD, overworldGenerator, seed, null, null);
+        createWorld(server, worldString + "_nether", BuiltinDimensionTypes.NETHER, netherGenerator, seed, null, null);
+        createWorld(server, worldString + "_end", BuiltinDimensionTypes.END, endGenerator, seed, null, null);
     }
 
-    private static void createWorld(MinecraftServer server, String worldString, RegistryKey<DimensionType> dimensionType, ChunkGenerator generator, BlockPos spawnPos, GameMode gameMode) {
-        createWorld(server, worldString, dimensionType, generator, server.getOverworld().getSeed(), spawnPos, gameMode);
+    private static void createWorld(MinecraftServer server, String worldString, ResourceKey<DimensionType> dimensionType, ChunkGenerator generator, BlockPos spawnPos, GameType gameMode) {
+        createWorld(server, worldString, dimensionType, generator, server.overworld().getSeed(), spawnPos, gameMode);
     }
 
     private static void createWorld(
             MinecraftServer server,
             String worldString,
-            RegistryKey<DimensionType> dimensionType,
+            ResourceKey<DimensionType> dimensionType,
             ChunkGenerator generator,
             long seed,
             BlockPos spawnPos,
-            GameMode gameMode
+            GameType gameMode
     ) {
-        RegistryKey<World> worldKey = RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of(NAMESPACE, worldString)
+        ResourceKey<Level> worldKey = ResourceKey.create(
+                Registries.DIMENSION,
+                Identifier.fromNamespaceAndPath(NAMESPACE, worldString)
         );
 
-        if (server.getWorld(worldKey) != null) {
-            // The game loaded our dimension but not with our CustomServerWorld, we need to fix that to have the custom generation and stuff
-            ServerWorld world = server.getWorld(worldKey);
+        if (server.getLevel(worldKey) != null) {
+            ServerLevel world = server.getLevel(worldKey);
             if (world instanceof CustomServerWorld) {
-                // LOGGER.info("World {} already exists, skipping creation.", worldString);
                 return;
             } else {
-                // kick players
-                for (ServerPlayerEntity player : world.getPlayers()) {
-                    Utils.saveInv(player, getBaseWorldName(worldKey.getValue().getPath()));
+                for (ServerPlayer player : world.players()) {
+                    Utils.saveInv(player, getBaseWorldName(worldKey.identifier().getPath()));
                     Utils.loadInv(player, "overworld");
                 }
                 unload(server, world);
             }
         }
 
-        RegistryEntry<DimensionType> dimensionTypeEntry = server.getRegistryManager().getOrThrow(RegistryKeys.DIMENSION_TYPE).getOptional(dimensionType).orElseThrow();
+        Holder.Reference<DimensionType> dimensionTypeEntry = server.registryAccess().lookupOrThrow(Registries.DIMENSION_TYPE).getOrThrow(dimensionType);
 
+        LevelStem options = new LevelStem(dimensionTypeEntry, generator);
 
-        DimensionOptions options = new DimensionOptions(
-                dimensionTypeEntry,
-                generator
-        );
-
-        DynamicRegistryManager registryManager = server.getCombinedDynamicRegistries().getCombinedRegistryManager();
-        SimpleRegistry<DimensionOptions> dimensionsRegistry = (SimpleRegistry<DimensionOptions>) registryManager.getOrThrow(RegistryKeys.DIMENSION);
+        RegistryAccess.Frozen registryManager = server.registries().compositeAccess();
+        MappedRegistry<LevelStem> dimensionsRegistry = (MappedRegistry<LevelStem>) registryManager.lookupOrThrow(Registries.LEVEL_STEM);
 
         boolean isFrozen = ((CustomSimpleRegistry<?>) dimensionsRegistry).multiWorld$isFrozen();
         ((CustomSimpleRegistry<?>) dimensionsRegistry).multiWorld$setFrozen(false);
 
-        RegistryKey<DimensionOptions> dimensionKey = RegistryKey.of(RegistryKeys.DIMENSION, worldKey.getValue());
-        if (!dimensionsRegistry.contains(dimensionKey)) {
-            dimensionsRegistry.add(
-                    dimensionKey,
-                    options,
-                    RegistryEntryInfo.DEFAULT
-            );
+        ResourceKey<LevelStem> dimensionKey = ResourceKey.create(Registries.LEVEL_STEM, worldKey.identifier());
+        if (!dimensionsRegistry.containsKey(dimensionKey)) {
+            dimensionsRegistry.register(dimensionKey, options, RegistrationInfo.BUILT_IN);
         }
 
         ((CustomSimpleRegistry<?>) dimensionsRegistry).multiWorld$setFrozen(isFrozen);
 
-        LevelProperties levelProperties = (LevelProperties) server.getSaveProperties().getMainWorldProperties();
+        PrimaryLevelData levelProperties = (PrimaryLevelData) server.getWorldData().overworldData();
         CustomServerWorldProperties newLevelProperties = new CustomServerWorldProperties(levelProperties, seed);
 
         CustomServerWorld.Constructor worldConstructor = CustomServerWorld::new;
         CustomServerWorld addedWorld = worldConstructor.create(server, worldKey, options, newLevelProperties, seed);
 
         if (gameMode != null) {
-            ((ServerWorldAccessor) addedWorld).getWorldProperties().setGameMode(gameMode);
+            ((ServerLevelAccessor) addedWorld).getWorldProperties().setGameType(gameMode);
         }
 
-        ((IMinecraftServerMixin) server).getWorlds().put(addedWorld.getRegistryKey(), addedWorld);
+        ((IMinecraftServerMixin) server).getWorlds().put(addedWorld.dimension(), addedWorld);
 
         if (spawnPos != null) {
-            newLevelProperties.setSpawnPoint(new WorldProperties.SpawnPoint(new GlobalPos(worldKey, spawnPos), 0.0F, 0.0F));
+            newLevelProperties.setSpawn(new LevelData.RespawnData(new GlobalPos(worldKey, spawnPos), 0.0F, 0.0F));
         } else {
-            IMinecraftServerMixin.invokeSetupSpawn(addedWorld, newLevelProperties, false, false, server.getChunkLoadProgress());
+            IMinecraftServerMixin.invokeSetupSpawn(addedWorld, newLevelProperties, false, false, server.getLevelLoadListener());
         }
 
         ServerWorldEvents.LOAD.invoker().onWorldLoad(server, addedWorld);
@@ -677,7 +591,7 @@ public class MultiWorld implements ModInitializer {
                 worldString,
                 dimensionType,
                 generator,
-                generator instanceof FlatChunkGenerator ? "flat" : worldString.endsWith("_nether") ? "nether" : worldString.endsWith("_end") ? "end" : "overworld",
+                generator instanceof FlatLevelSource ? "flat" : worldString.endsWith("_nether") ? "nether" : worldString.endsWith("_end") ? "end" : "overworld",
                 seed,
                 spawnPos,
                 gameMode
@@ -686,102 +600,84 @@ public class MultiWorld implements ModInitializer {
         LOGGER.info("Successfully loaded world '{}'", worldString);
     }
 
-    private static void unload(MinecraftServer server, ServerWorld world) {
-        RegistryKey<World> dimensionKey = world.getRegistryKey();
+    private static void unload(MinecraftServer server, ServerLevel world) {
+        ResourceKey<Level> dimensionKey = world.dimension();
 
         if (((IMinecraftServerMixin) server).getWorlds().remove(dimensionKey, world)) {
             world.save(new ProgressListener() {
                 @Override
-                public void setTitle(Text title) {}
+                public void progressStartNoAbort(Component title) {}
 
                 @Override
-                public void setTitleAndTask(Text title) {}
+                public void progressStart(Component title) {}
 
                 @Override
-                public void setTask(Text task) {}
+                public void progressStage(Component task) {}
 
                 @Override
                 public void progressStagePercentage(int percentage) {}
 
                 @Override
-                public void setDone() {}
+                public void stop() {}
             }, true, false);
 
             ServerWorldEvents.UNLOAD.invoker().onWorldUnload(server, world);
 
-            DynamicRegistryManager registryManager = server.getCombinedDynamicRegistries().getCombinedRegistryManager();
-            SimpleRegistry<DimensionOptions> dimensionsRegistry = (SimpleRegistry<DimensionOptions>) registryManager.getOrThrow(RegistryKeys.DIMENSION);
-            CustomSimpleRegistry.remove(dimensionsRegistry, dimensionKey.getValue());
+            RegistryAccess.Frozen registryManager = server.registries().compositeAccess();
+            MappedRegistry<LevelStem> dimensionsRegistry = (MappedRegistry<LevelStem>) registryManager.lookupOrThrow(Registries.LEVEL_STEM);
+            CustomSimpleRegistry.remove(dimensionsRegistry, dimensionKey.identifier());
         }
     }
 
     public static void deleteWorld(MinecraftServer server, String worldName) {
         LOGGER.info("Deleting world: {}", worldName);
 
-        // Identifier les clés de registre pour toutes les dimensions
-        RegistryKey<World> overWorldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName));
-        RegistryKey<World> netherWorldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName + "_nether"));
-        RegistryKey<World> endWorldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName + "_end"));
+        ResourceKey<Level> overWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
+        ResourceKey<Level> netherWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_nether"));
+        ResourceKey<Level> endWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_end"));
 
-        // Récupérer les références aux mondes
-        ServerWorld overworld = server.getWorld(overWorldKey);
-        ServerWorld nether = server.getWorld(netherWorldKey);
-        ServerWorld end = server.getWorld(endWorldKey);
+        ServerLevel overworld = server.getLevel(overWorldKey);
+        ServerLevel nether = server.getLevel(netherWorldKey);
+        ServerLevel end = server.getLevel(endWorldKey);
 
-        // Déclencher les événements de déchargement pour chaque monde existant
         if (overworld != null) {
             ServerWorldEvents.UNLOAD.invoker().onWorldUnload(server, overworld);
         }
-
         if (nether != null) {
             ServerWorldEvents.UNLOAD.invoker().onWorldUnload(server, nether);
         }
-
         if (end != null) {
             ServerWorldEvents.UNLOAD.invoker().onWorldUnload(server, end);
         }
 
-        // Retirer les dimensions du registre
-        DynamicRegistryManager registryManager = server.getCombinedDynamicRegistries().getCombinedRegistryManager();
-        SimpleRegistry<DimensionOptions> dimensionsRegistry = (SimpleRegistry<DimensionOptions>) registryManager.getOrThrow(RegistryKeys.DIMENSION);
+        RegistryAccess.Frozen registryManager = server.registries().compositeAccess();
+        MappedRegistry<LevelStem> dimensionsRegistry = (MappedRegistry<LevelStem>) registryManager.lookupOrThrow(Registries.LEVEL_STEM);
 
-        // Retirer l'overworld du registre
         if (overworld != null) {
-            CustomSimpleRegistry.remove(dimensionsRegistry, overWorldKey.getValue());
+            CustomSimpleRegistry.remove(dimensionsRegistry, overWorldKey.identifier());
         }
-
-        // Retirer le nether du registre s'il existe
         if (nether != null) {
-            CustomSimpleRegistry.remove(dimensionsRegistry, netherWorldKey.getValue());
+            CustomSimpleRegistry.remove(dimensionsRegistry, netherWorldKey.identifier());
         }
-
-        // Retirer l'end du registre s'il existe
         if (end != null) {
-            CustomSimpleRegistry.remove(dimensionsRegistry, endWorldKey.getValue());
+            CustomSimpleRegistry.remove(dimensionsRegistry, endWorldKey.identifier());
         }
 
-        // Récupérer le dossier du serveur
-        String serverWorldFolder = server.getSaveProperties().getLevelName();
+        String serverWorldFolder = server.getWorldData().getLevelName();
 
-        // Supprimer les fichiers des dimensions
         if (overworld != null) {
             deleteWorldFiles(serverWorldFolder, overWorldKey);
             ((IMinecraftServerMixin) server).getWorlds().remove(overWorldKey);
         }
-
-        // Supprimer les fichiers du nether s'il existe
         if (nether != null) {
             deleteWorldFiles(serverWorldFolder, netherWorldKey);
             ((IMinecraftServerMixin) server).getWorlds().remove(netherWorldKey);
         }
-
-        // Supprimer les fichiers de l'end s'il existe
         if (end != null) {
             deleteWorldFiles(serverWorldFolder, endWorldKey);
             ((IMinecraftServerMixin) server).getWorlds().remove(endWorldKey);
         }
 
-        // Supprimer les données des joueurs liées à ce monde
         File multiworldFolder = new File(serverWorldFolder, NAMESPACE);
         File worldNameFolder = new File(multiworldFolder, worldName);
         if (worldNameFolder.exists()) {
@@ -791,9 +687,9 @@ public class MultiWorld implements ModInitializer {
         LOGGER.info("World deletion completed: {}", worldName);
     }
 
-    private static void deleteWorldFiles(String serverWorldFolder, RegistryKey<World> worldKey) {
+    private static void deleteWorldFiles(String serverWorldFolder, ResourceKey<Level> worldKey) {
         String worldPath = serverWorldFolder + "/dimensions/" +
-                worldKey.getValue().getNamespace() + "/" + worldKey.getValue().getPath();
+                worldKey.identifier().getNamespace() + "/" + worldKey.identifier().getPath();
         File worldFolder = new File(worldPath);
 
         if (worldFolder.exists()) {

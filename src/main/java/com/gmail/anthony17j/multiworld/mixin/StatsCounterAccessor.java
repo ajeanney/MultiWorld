@@ -1,13 +1,13 @@
 package com.gmail.anthony17j.multiworld.mixin;
 
 import it.unimi.dsi.fastutil.objects.Object2IntMap;
-import net.minecraft.stat.Stat;
-import net.minecraft.stat.StatHandler;
+import net.minecraft.stats.Stat;
+import net.minecraft.stats.StatsCounter;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 
-@Mixin(StatHandler.class)
-public interface StatHandlerAccessor {
-    @Accessor
+@Mixin(StatsCounter.class)
+public interface StatsCounterAccessor {
+    @Accessor("stats")
     Object2IntMap<Stat<?>> getStatMap();
 }

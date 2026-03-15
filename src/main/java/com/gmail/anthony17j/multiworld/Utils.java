@@ -2,33 +2,33 @@ package com.gmail.anthony17j.multiworld;
 
 import com.github.cliftonlabs.json_simple.JsonObject;
 import com.github.cliftonlabs.json_simple.Jsoner;
-import com.gmail.anthony17j.multiworld.mixin.ServerWorldAccessor;
-import com.gmail.anthony17j.multiworld.mixin.StatHandlerAccessor;
+import com.gmail.anthony17j.multiworld.mixin.ServerLevelAccessor;
+import com.gmail.anthony17j.multiworld.mixin.ServerPlayerAccessor;
+import com.gmail.anthony17j.multiworld.mixin.StatsCounterAccessor;
 import com.gmail.anthony17j.multiworld.util.Json;
-import it.unimi.dsi.fastutil.objects.ObjectSet;
-import net.minecraft.entity.Entity;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.nbt.StringNbtReader;
-import net.minecraft.network.packet.s2c.play.PositionFlag;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
+import com.google.gson.JsonParser;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.GlobalPos;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.TagParser;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.stat.*;
-import net.minecraft.storage.NbtReadView;
-import net.minecraft.storage.NbtWriteView;
-import net.minecraft.storage.ReadView;
-import net.minecraft.util.ErrorReporter;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.GlobalPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.GameMode;
-import net.minecraft.world.TeleportTarget;
-import net.minecraft.world.World;
-import net.minecraft.world.WorldProperties;
-import net.minecraft.world.dimension.DimensionOptions;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.stats.ServerStatsCounter;
+import net.minecraft.stats.Stat;
+import net.minecraft.util.ProblemReporter;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.GameType;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.portal.TeleportTransition;
+import net.minecraft.world.level.storage.LevelData;
+import net.minecraft.world.level.storage.TagValueInput;
+import net.minecraft.world.level.storage.TagValueOutput;
+import net.minecraft.world.level.storage.ValueInput;
+import net.minecraft.world.phys.Vec3;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -36,26 +36,22 @@ import java.io.FileReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.Optional;
-import java.util.Set;
 
 import static com.gmail.anthony17j.multiworld.MultiWorld.LOGGER;
 import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 public class Utils {
-    public static void saveInv(ServerPlayerEntity player, String world) {
-        // LOGGER.info("Saving player data for {} in world {}", player.getName().getString(), world);
+    public static void saveInv(ServerPlayer player, String world) {
         try {
-            String worldFolder = player.getEntityWorld().getServer().getSaveProperties().getLevelName();
+            String worldFolder = player.level().getServer().getWorldData().getLevelName();
 
-            // create a writer
             if (new File(worldFolder + "/" + NAMESPACE + "/" + world).mkdirs()) {
                 LOGGER.info("Directory created: {}/{}/{}", worldFolder, NAMESPACE, world);
             }
-            BufferedWriter writer = Files.newBufferedWriter(Paths.get(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getUuidAsString() + ".json"));
+            BufferedWriter writer = Files.newBufferedWriter(Paths.get(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getStringUUID() + ".json"));
 
-            ErrorReporter.Logging logging = new ErrorReporter.Logging(player.getErrorReporterContext(), LOGGER);
-            NbtWriteView nbtWriteView = NbtWriteView.create(logging, player.getRegistryManager());
-            player.writeData(nbtWriteView);
+            TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, player.registryAccess());
+            ((ServerPlayerAccessor) player).invokeAddAdditionalSaveData(output);
 
             // Remove ender pearls the player had launched (they will be put back on load)
             player.getEnderPearls().forEach((enderPearl) -> enderPearl.remove(Entity.RemovalReason.DISCARDED));
@@ -65,29 +61,28 @@ public class Utils {
                 player.getRootVehicle().remove(Entity.RemovalReason.DISCARDED);
             }
 
+            CompoundTag tag = output.buildResult();
+
             // add respawn position to the tag
-            NbtCompound respawnTag = new NbtCompound();
-            NbtCompound tag = nbtWriteView.getNbt();
-            ServerPlayerEntity.Respawn respawn = player.getRespawn();
+            CompoundTag respawnTag = new CompoundTag();
+            ServerPlayer.RespawnConfig respawn = player.getRespawnConfig();
             if (respawn != null) {
-                respawnTag.putString("dimension", respawn.respawnData().getDimension().getValue().toString());
+                respawnTag.putString("dimension", respawn.respawnData().dimension().identifier().toString());
                 respawnTag.putBoolean("forced", respawn.forced());
                 respawnTag.putFloat("angle", respawn.respawnData().yaw());
                 respawnTag.putFloat("pitch", respawn.respawnData().pitch());
-                respawnTag.putIntArray("pos", new int[]{respawn.respawnData().getPos().getX(), respawn.respawnData().getPos().getY(), respawn.respawnData().getPos().getZ()});
+                respawnTag.putIntArray("pos", new int[]{respawn.respawnData().pos().getX(), respawn.respawnData().pos().getY(), respawn.respawnData().pos().getZ()});
                 tag.put("respawn", respawnTag);
             }
 
-
             // Save player stats
-            player.getStatHandler().save();
-            // go to the world folder, then "stats" folder, inside there is a json file with name uuid of the player, copy the content to a key "stats" in the json
+            player.getStats().save();
             JsonObject statsJson = new JsonObject();
             File statsFolder = new File(worldFolder + "/stats");
             File[] statsFiles = statsFolder.listFiles();
             if (statsFiles != null) {
                 for (File statsFile : statsFiles) {
-                    if (statsFile.getName().equals(player.getUuidAsString() + ".json")) {
+                    if (statsFile.getName().equals(player.getStringUUID() + ".json")) {
                         try (FileReader statsReader = new FileReader(statsFile)) {
                             statsJson = (JsonObject) Jsoner.deserialize(statsReader);
                         }
@@ -96,14 +91,13 @@ public class Utils {
             }
 
             // Save player advancements
-            player.getAdvancementTracker().save();
-            // same as above but for advancements folder
+            player.getAdvancements().save();
             JsonObject advancementsJson = new JsonObject();
             File advancementsFolder = new File(worldFolder + "/advancements");
             File[] advancementsFiles = advancementsFolder.listFiles();
             if (advancementsFiles != null) {
                 for (File advancementsFile : advancementsFiles) {
-                    if (advancementsFile.getName().equals(player.getUuidAsString() + ".json")) {
+                    if (advancementsFile.getName().equals(player.getStringUUID() + ".json")) {
                         try (FileReader advancementsReader = new FileReader(advancementsFile)) {
                             advancementsJson = (JsonObject) Jsoner.deserialize(advancementsReader);
                         }
@@ -112,11 +106,7 @@ public class Utils {
             }
 
             Json uuid = new Json(tag.toString(), statsJson, advancementsJson);
-
-            // convert Json list to JSON and write to file.json
             Jsoner.serialize(uuid, writer);
-
-            // close the writer
             writer.close();
 
         } catch (Exception ex) {
@@ -124,149 +114,122 @@ public class Utils {
         }
     }
 
-    public static void loadInv(ServerPlayerEntity player, String world) {
-        // LOGGER.info("Loading player data for {} in world {}", player.getName().getString(), world);
+    public static void loadInv(ServerPlayer player, String world) {
+        String worldFolder = player.level().getServer().getWorldData().getLevelName();
 
-        String worldFolder = player.getEntityWorld().getServer().getSaveProperties().getLevelName();
-        ErrorReporter.Logging logging = new ErrorReporter.Logging(player.getErrorReporterContext(), LOGGER);
-
-        try (FileReader fileReader = new FileReader(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getUuidAsString() + ".json")) {
+        try (FileReader fileReader = new FileReader(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getStringUUID() + ".json")) {
             JsonObject file = (JsonObject) Jsoner.deserialize(fileReader);
 
             String playerString = (String) file.get("player");
-            NbtCompound playerNbt = StringNbtReader.readCompound(playerString);
+            CompoundTag playerNbt = TagParser.parseCompoundFully(playerString);
 
-            ReadView nbtReadView = NbtReadView.create(logging, player.getRegistryManager(), playerNbt);
-            player.readData(nbtReadView);
-            player.readEnderPearls(nbtReadView);
-            // player.readGameModeData(nbtReadView);
+            ValueInput nbtReadView = TagValueInput.create(ProblemReporter.DISCARDING, player.registryAccess(), playerNbt);
+            ((ServerPlayerAccessor) player).invokeReadAdditionalSaveData(nbtReadView);
+            player.loadAndSpawnEnderPearls(nbtReadView);
 
-            String[] strArr = playerNbt.getString("Dimension").orElse(World.OVERWORLD.getValue().toString()).split(":");
-            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
-            RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
-            ServerWorld dimension = player.getEntityWorld().getServer().getWorld(key);
+            String[] strArr = playerNbt.getString("Dimension").orElse(Level.OVERWORLD.identifier().toString()).split(":");
+            ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(strArr[0], strArr[1]));
+            ServerLevel dimension = player.level().getServer().getLevel(key);
 
             // Load respawn position
-            // get respawn tag from playerNbt
-            Optional<NbtCompound> respawnTag = playerNbt.getCompound("respawn");
+            Optional<CompoundTag> respawnTag = playerNbt.getCompound("respawn");
             if (respawnTag.isPresent()) {
-                NbtCompound respawnData = respawnTag.get();
+                CompoundTag respawnData = respawnTag.get();
                 int[] respawnPos = respawnData.getIntArray("pos").orElseThrow();
-                String respawnDimensionStr = respawnData.getString("dimension").orElse(World.OVERWORLD.getValue().toString());
+                String respawnDimensionStr = respawnData.getString("dimension").orElse(Level.OVERWORLD.identifier().toString());
                 String[] dimParts = respawnDimensionStr.split(":");
-                RegistryKey<DimensionOptions> respawnDimensionKey = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(dimParts[0], dimParts[1]));
-                RegistryKey<World> respawnDimension = RegistryKey.of(RegistryKeys.WORLD, respawnDimensionKey.getValue());
-                ServerPlayerEntity.Respawn respawn = new ServerPlayerEntity.Respawn(
-                        new WorldProperties.SpawnPoint(
-                                new GlobalPos(
-                                        respawnDimension,
-                                        new BlockPos(respawnPos[0], respawnPos[1], respawnPos[2])
-                                ),
-                                respawnData.getFloat("angle").orElse(0F),
-                                respawnData.getFloat("pitch").orElse(0F)),
-                        respawnData.getBoolean("forced").orElse(false)
+                ResourceKey<Level> respawnDimension = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(dimParts[0], dimParts[1]));
+                LevelData.RespawnData respawnDataObj = new LevelData.RespawnData(
+                        new GlobalPos(respawnDimension, new BlockPos(respawnPos[0], respawnPos[1], respawnPos[2])),
+                        respawnData.getFloat("angle").orElse(0F),
+                        respawnData.getFloat("pitch").orElse(0F)
                 );
-                player.setSpawnPoint(respawn, false);
+                player.setRespawnPosition(new ServerPlayer.RespawnConfig(respawnDataObj, respawnData.getBooleanOr("forced", false)), false);
             }
 
             // Load player stats
             if (file.containsKey("stats")) {
                 JsonObject statsData = (JsonObject) file.get("stats");
 
-                ServerStatHandler statHandler = player.getStatHandler();
-                ObjectSet<Stat<?>> stats = ((StatHandlerAccessor) statHandler).getStatMap().keySet();
-                for (Stat<?> stat : stats) {
+                ServerStatsCounter statHandler = player.getStats();
+                for (Stat<?> stat : ((StatsCounterAccessor) statHandler).getStatMap().keySet()) {
                     player.resetStat(stat);
                 }
 
-                statHandler.parse(player.getEntityWorld().getServer().getDataFixer(), statsData.toJson());
-                statHandler.updateStatSet();
+                statHandler.parse(player.level().getServer().getFixerUpper(), JsonParser.parseString(statsData.toJson()));
+                statHandler.markAllDirty();
             }
 
             // Load player advancements
             if (file.containsKey("advancements")) {
                 JsonObject advancementsData = (JsonObject) file.get("advancements");
                 Files.write(
-                    Paths.get(worldFolder + "/advancements/" + player.getUuidAsString() + ".json"),
+                    Paths.get(worldFolder + "/advancements/" + player.getStringUUID() + ".json"),
                     advancementsData.toJson().getBytes()
                 );
             }
-            player.getAdvancementTracker().reload(player.getEntityWorld().getServer().getAdvancementLoader());
+            player.getAdvancements().reload(player.level().getServer().getAdvancements());
 
-            player.teleport(
-                dimension,
-                player.getX(),
-                player.getY(),
-                player.getZ(),
-                PositionFlag.getFlags(0),
-                player.getYaw(),
-                player.getPitch(),
-                false
-            );
+            if (dimension != null) {
+                player.teleport(new TeleportTransition(dimension, new Vec3(player.getX(), player.getY(), player.getZ()), Vec3.ZERO, player.getYRot(), player.getXRot(), TeleportTransition.DO_NOTHING));
+            }
 
-            player.readRootVehicle(nbtReadView);
+            player.loadAndSpawnParentVehicle(nbtReadView);
         } catch (Exception ex) {
-            NbtCompound playerNbt = new NbtCompound();
+            CompoundTag playerNbt = new CompoundTag();
 
-            ReadView nbtReadView = NbtReadView.create(logging, player.getRegistryManager(), playerNbt);
+            ValueInput nbtReadView = TagValueInput.create(ProblemReporter.DISCARDING, player.registryAccess(), playerNbt);
+            ((ServerPlayerAccessor) player).invokeReadAdditionalSaveData(nbtReadView);
+            player.loadAndSpawnEnderPearls(nbtReadView);
 
-            player.readData(nbtReadView);
-            // player.readGameModeData(nbtReadView);
-            player.readEnderPearls(nbtReadView);
-
-            player.setSpawnPoint(null, false);
+            player.setRespawnPosition(null, false);
 
             // Reset stats
-            ServerStatHandler statHandler = player.getStatHandler();
-            ObjectSet<Stat<?>> stats = ((StatHandlerAccessor) statHandler).getStatMap().keySet();
-            for (Stat<?> stat : stats) {
+            ServerStatsCounter statHandler = player.getStats();
+            for (Stat<?> stat : ((StatsCounterAccessor) statHandler).getStatMap().keySet()) {
                 player.resetStat(stat);
             }
-            statHandler.updateStatSet();
+            statHandler.markAllDirty();
 
             // Reset advancements
             JsonObject clearedAdvancementsData = new JsonObject();
             JsonObject advancementsData = new JsonObject();
-            try (FileReader advancementsReader = new FileReader(worldFolder + "/advancements/" + player.getUuidAsString() + ".json")) {
+            try (FileReader advancementsReader = new FileReader(worldFolder + "/advancements/" + player.getStringUUID() + ".json")) {
                 advancementsData = (JsonObject) Jsoner.deserialize(advancementsReader);
             } catch (Exception e) {
                 LOGGER.error("Error loading player advancements: {}", e.getMessage());
             }
             clearedAdvancementsData.put("DataVersion", advancementsData.get("DataVersion"));
-            try (BufferedWriter advancementsWriter = Files.newBufferedWriter(Paths.get(worldFolder + "/advancements/" + player.getUuidAsString() + ".json"))) {
+            try (BufferedWriter advancementsWriter = Files.newBufferedWriter(Paths.get(worldFolder + "/advancements/" + player.getStringUUID() + ".json"))) {
                 Jsoner.serialize(clearedAdvancementsData, advancementsWriter);
             } catch (Exception e) {
                 LOGGER.error("Error writing cleared advancements: {}", e.getMessage());
             }
-            player.getAdvancementTracker().reload(player.getEntityWorld().getServer().getAdvancementLoader());
+            player.getAdvancements().reload(player.level().getServer().getAdvancements());
 
-            // Teleport
-            String dimension = world.equals("overworld") ? "minecraft:overworld" : NAMESPACE + ":" + world;
+            // Teleport to world spawn
+            String dimensionStr = world.equals("overworld") ? "minecraft:overworld" : NAMESPACE + ":" + world;
+            String[] strArr = dimensionStr.split(":");
+            ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(strArr[0], strArr[1]));
 
-            String[] strArr = dimension.split(":");
-            RegistryKey<DimensionOptions> DIMENSION_KEY = RegistryKey.of(RegistryKeys.DIMENSION, Identifier.of(strArr[0], strArr[1]));
-            RegistryKey<World> key = RegistryKey.of(RegistryKeys.WORLD, DIMENSION_KEY.getValue());
+            MinecraftServer server = player.level().getServer();
+            ServerLevel serverWorld = server.getLevel(key);
 
-            // teleport to world spawn
-            MinecraftServer server = player.getEntityWorld().getServer();
-            ServerWorld serverWorld = server.getWorld(key);
+            if (serverWorld != null) {
+                BlockPos spawnPos = serverWorld.getRespawnData().pos();
+                Vec3 worldSpawn = Vec3.atBottomCenterOf(spawnPos);
+                player.teleport(new TeleportTransition(serverWorld, worldSpawn, Vec3.ZERO, 0.0F, 0.0F, TeleportTransition.DO_NOTHING));
 
-            Vec3d worldSpawn = player.getWorldSpawnPos(serverWorld, serverWorld.getLevelProperties().getSpawnPoint().getPos()).toBottomCenterPos();
-            TeleportTarget teleportTarget = new TeleportTarget(serverWorld, worldSpawn, Vec3d.ZERO, 0.0F, 0.0F, false, false, Set.of(), TeleportTarget.NO_OP);
-
-            // player teleport
-            player.teleport(teleportTarget.world(), teleportTarget.position().getX(), teleportTarget.position().getY(), teleportTarget.position().getZ(), PositionFlag.getFlags(0), teleportTarget.yaw(), teleportTarget.pitch(), true);
-
-            // Do it twice to prevent a bug where the player must log out and back in to change gamemode
-            GameMode gameMode = ((ServerWorldAccessor) serverWorld).getWorldProperties().getGameMode();
-            player.changeGameMode(GameMode.byIndex(player.getGameMode().getIndex() + 1 % 3));
-            player.changeGameMode(gameMode);
+                // Do it twice to prevent a bug where the player must log out and back in to change gamemode
+                GameType gameMode = ((ServerLevelAccessor) serverWorld).getWorldProperties().getGameType();
+                player.setGameMode(gameMode == GameType.CREATIVE ? GameType.SURVIVAL : GameType.CREATIVE);
+                player.setGameMode(gameMode);
+            }
         }
     }
 
-    public static String getMostRecentWorldSaved(ServerPlayerEntity player, String sourceWorld) {
-        // in the namespace folder, check every folder (world), then inside check the file with the user uuid. The world with the most recent file is the one we want
-        String worldFolder = player.getEntityWorld().getServer().getSaveProperties().getLevelName();
+    public static String getMostRecentWorldSaved(ServerPlayer player, String sourceWorld) {
+        String worldFolder = player.level().getServer().getWorldData().getLevelName();
         File folder = new File(worldFolder + "/" + NAMESPACE);
         File[] listOfFiles = folder.listFiles();
         if (listOfFiles != null) {
@@ -274,7 +237,7 @@ public class Utils {
             long mostRecentTime = 0;
             for (File file : listOfFiles) {
                 if (file.isDirectory()) {
-                    File playerFile = new File(file.getPath() + "/" + player.getUuid() + ".json");
+                    File playerFile = new File(file.getPath() + "/" + player.getUUID() + ".json");
                     if (playerFile.exists()) {
                         long lastModified = playerFile.lastModified();
                         if (lastModified > mostRecentTime && !file.getName().equals(sourceWorld)) {

@@ -5,15 +5,17 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
-import net.minecraft.command.CommandSource;
-import net.minecraft.registry.*;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.network.ServerPlayerEntity;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.Identifier;
-import net.minecraft.world.World;
+import net.minecraft.commands.CommandBuildContext;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.SharedSuggestionProvider;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Random;
@@ -21,19 +23,19 @@ import java.util.stream.Collectors;
 
 import static com.gmail.anthony17j.multiworld.CustomServerWorld.getBaseWorldName;
 import static com.gmail.anthony17j.multiworld.MultiWorld.*;
-import static net.minecraft.server.command.CommandManager.literal;
+import static net.minecraft.commands.Commands.literal;
 
 public final class MultiWorldCommand {
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        LiteralArgumentBuilder<ServerCommandSource> rootCommand = literal("mw")
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher, CommandBuildContext registryAccess, Commands.CommandSelection environment) {
+        LiteralArgumentBuilder<CommandSourceStack> rootCommand = literal("mw")
             .executes(ctx -> {
                 showHelp(ctx.getSource());
                 return 1;
             });
 
         rootCommand.then(literal("tp")
-            .then(CommandManager.argument("world", StringArgumentType.word())
-                .suggests((ctx, builder) -> CommandSource.suggestMatching(getAvailableWorlds(ctx.getSource()), builder))
+            .then(Commands.argument("world", StringArgumentType.word())
+                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(getAvailableWorlds(ctx.getSource()), builder))
                 .executes(ctx -> {
                     String worldName = StringArgumentType.getString(ctx, "world");
                     return teleportCommand(ctx.getSource(), worldName);
@@ -42,9 +44,9 @@ public final class MultiWorldCommand {
         );
 
         rootCommand.then(literal("import")
-            .requires(source -> source.hasPermissionLevel(4))
-            .then(CommandManager.argument("folderPath", StringArgumentType.string())
-                .then(CommandManager.argument("worldName", StringArgumentType.word())
+            .requires(Commands.hasPermission(Commands.LEVEL_OWNERS))
+            .then(Commands.argument("folderPath", StringArgumentType.string())
+                .then(Commands.argument("worldName", StringArgumentType.word())
                     .executes(ctx -> {
                         String folderPath = StringArgumentType.getString(ctx, "folderPath");
                         String worldName = StringArgumentType.getString(ctx, "worldName");
@@ -54,17 +56,15 @@ public final class MultiWorldCommand {
             )
         );
 
-        // Ajout de la sous-commande "create" pour les administrateurs
         rootCommand.then(literal("create")
-            .requires(source -> source.hasPermissionLevel(4))
-            .then(CommandManager.argument("worldName", StringArgumentType.word())
+            .requires(Commands.hasPermission(Commands.LEVEL_OWNERS))
+            .then(Commands.argument("worldName", StringArgumentType.word())
                 .executes(ctx -> {
                     String worldName = StringArgumentType.getString(ctx, "worldName");
-                    // Utiliser une seed aléatoire si aucune n'est spécifiée
                     long seed = new Random().nextLong();
                     return createCommand(ctx.getSource(), worldName, seed);
                 })
-                .then(CommandManager.argument("seed", LongArgumentType.longArg())
+                .then(Commands.argument("seed", LongArgumentType.longArg())
                     .executes(ctx -> {
                         String worldName = StringArgumentType.getString(ctx, "worldName");
                         long seed = LongArgumentType.getLong(ctx, "seed");
@@ -74,17 +74,13 @@ public final class MultiWorldCommand {
             )
         );
 
-        // Ajout de la sous-commande "delete" pour les administrateurs
         rootCommand.then(literal("delete")
-            .requires(source -> source.hasPermissionLevel(4))
-            .then(CommandManager.argument("worldName", StringArgumentType.word())
-                .suggests((ctx, builder) -> {
-                    // Suggérer seulement les mondes personnalisés, pas les mondes par défaut
-                    return CommandSource.suggestMatching(
-                        getAvailableCustomWorlds(ctx.getSource()),
-                        builder
-                    );
-                })
+            .requires(Commands.hasPermission(Commands.LEVEL_OWNERS))
+            .then(Commands.argument("worldName", StringArgumentType.word())
+                .suggests((ctx, builder) -> SharedSuggestionProvider.suggest(
+                    getAvailableCustomWorlds(ctx.getSource()),
+                    builder
+                ))
                 .executes(ctx -> {
                     String worldName = StringArgumentType.getString(ctx, "worldName");
                     return deleteCommand(ctx.getSource(), worldName);
@@ -95,22 +91,22 @@ public final class MultiWorldCommand {
         dispatcher.register(rootCommand);
     }
 
-    private static void showHelp(ServerCommandSource source) {
-        boolean isAdmin = source.hasPermissionLevel(4);
+    private static void showHelp(CommandSourceStack source) {
+        boolean isAdmin = Commands.hasPermission(Commands.LEVEL_OWNERS).test(source);
 
-        source.sendMessage(Text.literal("§6MultiWorld Commands:"));
-        source.sendMessage(Text.literal("§7/mw tp <world> §8- §7Teleport to a world"));
+        source.sendSystemMessage(Component.literal("§6MultiWorld Commands:"));
+        source.sendSystemMessage(Component.literal("§7/mw tp <world> §8- §7Teleport to a world"));
 
         if (isAdmin) {
-            source.sendMessage(Text.literal("§7/mw import <folder> <name> §8- §7Import world from folder"));
-            source.sendMessage(Text.literal("§7/mw create <name> [seed] §8- §7Create a new world"));
-            source.sendMessage(Text.literal("§7/mw delete <name> §8- §7Delete a world"));
+            source.sendSystemMessage(Component.literal("§7/mw import <folder> <name> §8- §7Import world from folder"));
+            source.sendSystemMessage(Component.literal("§7/mw create <name> [seed] §8- §7Create a new world"));
+            source.sendSystemMessage(Component.literal("§7/mw delete <name> §8- §7Delete a world"));
         }
     }
 
-    private static java.util.List<String> getAvailableWorlds(ServerCommandSource source) {
-        return source.getWorldKeys().stream()
-                .map(RegistryKey::getValue)
+    private static java.util.List<String> getAvailableWorlds(CommandSourceStack source) {
+        return source.levels().stream()
+                .map(ResourceKey::identifier)
                 .filter(id -> id.getNamespace().equals(NAMESPACE) || id.getNamespace().equals("minecraft"))
                 .filter(id -> !id.getPath().endsWith("_nether") && !id.getPath().endsWith("_end"))
                 .map(Identifier::getPath)
@@ -118,126 +114,117 @@ public final class MultiWorldCommand {
                 .collect(Collectors.toList());
     }
 
-    private static java.util.List<String> getAvailableCustomWorlds(ServerCommandSource source) {
-        return source.getWorldKeys().stream()
-                .map(RegistryKey::getValue)
-                .filter(id -> id.getNamespace().equals(NAMESPACE))  // Uniquement les mondes du namespace multiworld
-                .filter(id -> !id.getPath().endsWith("_nether") && !id.getPath().endsWith("_end"))  // Pas les dimensions nether/end
-                .filter(id -> !id.getPath().equals(CREATIVE_WORLD_NAME))  // Exclure le monde créatif par défaut
+    private static java.util.List<String> getAvailableCustomWorlds(CommandSourceStack source) {
+        return source.levels().stream()
+                .map(ResourceKey::identifier)
+                .filter(id -> id.getNamespace().equals(NAMESPACE))
+                .filter(id -> !id.getPath().endsWith("_nether") && !id.getPath().endsWith("_end"))
+                .filter(id -> !id.getPath().equals(CREATIVE_WORLD_NAME))
                 .map(Identifier::getPath)
                 .collect(Collectors.toList());
     }
 
-    private static int teleportCommand(ServerCommandSource source, String worldString) {
+    private static int teleportCommand(CommandSourceStack source, String worldString) {
         worldString = getBaseWorldName(worldString);
-        ServerWorld worldTarget = source.getServer().getOverworld();
+        ServerLevel worldTarget = source.getServer().overworld();
         if (!worldString.equals("overworld")) {
-          Identifier key = Identifier.of(NAMESPACE, worldString);
-            RegistryKey<World> worldKey = RegistryKey.of(
-                    RegistryKeys.WORLD,
-                    key
+            ResourceKey<Level> worldKey = ResourceKey.create(
+                    Registries.DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, worldString)
             );
-            worldTarget = source.getServer().getWorld(worldKey);
+            worldTarget = source.getServer().getLevel(worldKey);
         }
 
         if (worldTarget == null) {
-            source.sendMessage(Text.literal("World " + worldString + " not found!"));
+            source.sendFailure(Component.literal("World " + worldString + " not found!"));
             return 0;
         }
 
         String sourceWorldName = getSourceWorldName(source);
-        String targetWorldName = worldTarget.getRegistryKey().getValue().getPath();
+        String targetWorldName = worldTarget.dimension().identifier().getPath();
 
         if (sourceWorldName.equals(targetWorldName)) {
-            source.sendMessage(Text.literal("You are already in this world!"));
+            source.sendFailure(Component.literal("You are already in this world!"));
             return 0;
         }
 
-        ServerPlayerEntity player = source.getPlayer();
+        ServerPlayer player = source.getPlayer();
 
         Utils.saveInv(player, sourceWorldName);
         Utils.loadInv(player, targetWorldName);
 
-        player.sendMessage(Text.literal("Teleported to " + worldTarget.getRegistryKey().getValue().toString() + " !"), false);
+        player.sendSystemMessage(Component.literal("Teleported to " + worldTarget.dimension().identifier().toString() + " !"));
 
         return 1;
     }
 
-    private static int importCommand(ServerCommandSource source, String folderPath, String worldName) {
-        source.sendMessage(Text.literal("Importing world from " + folderPath + " to " + worldName + "..."));
+    private static int importCommand(CommandSourceStack source, String folderPath, String worldName) {
+        source.sendSystemMessage(Component.literal("Importing world from " + folderPath + " to " + worldName + "..."));
 
         try {
             importWorld(source.getServer(), folderPath, worldName);
-            source.sendMessage(Text.literal("World imported successfully!"));
+            source.sendSuccess(() -> Component.literal("World imported successfully!"), false);
             return 1;
         } catch (Exception e) {
-            source.sendMessage(Text.literal("Error importing world: " + e.getMessage()));
+            source.sendFailure(Component.literal("Error importing world: " + e.getMessage()));
             LOGGER.error("Error importing world", e);
             return 0;
         }
     }
 
-    private static int createCommand(ServerCommandSource source, String worldName, long seed) {
-        // Vérifier si le monde existe déjà
-        RegistryKey<World> worldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName));
-        if (source.getServer().getWorld(worldKey) != null) {
-            source.sendMessage(Text.literal("§cA world with this name already exists!"));
+    private static int createCommand(CommandSourceStack source, String worldName, long seed) {
+        ResourceKey<Level> worldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
+        if (source.getServer().getLevel(worldKey) != null) {
+            source.sendFailure(Component.literal("§cA world with this name already exists!"));
             return 0;
         }
 
-        source.sendMessage(Text.literal("Creating new world '" + worldName + "' with seed: " + seed));
+        source.sendSystemMessage(Component.literal("Creating new world '" + worldName + "' with seed: " + seed));
 
         try {
-            // Créer les mondes (overworld, nether, end) avec la seed spécifiée
             createWorldWithDimensions(source.getServer(), worldName, seed);
-
-            source.sendMessage(Text.literal("§aWorld created successfully! Use §6/mw tp " + worldName + "§a to teleport to it."));
+            source.sendSuccess(() -> Component.literal("§aWorld created successfully! Use §6/mw tp " + worldName + "§a to teleport to it."), false);
             return 1;
         } catch (Exception e) {
-            source.sendMessage(Text.literal("§cError creating world: " + e.getMessage()));
+            source.sendFailure(Component.literal("§cError creating world: " + e.getMessage()));
             LOGGER.error("Error creating world", e);
             return 0;
         }
     }
 
-    private static int deleteCommand(ServerCommandSource source, String worldName) {
-        // Vérifier si le monde existe
-        RegistryKey<World> worldKey = RegistryKey.of(RegistryKeys.WORLD, Identifier.of(NAMESPACE, worldName));
-        if (source.getServer().getWorld(worldKey) == null) {
-            source.sendMessage(Text.literal("§cWorld '" + worldName + "' not found!"));
+    private static int deleteCommand(CommandSourceStack source, String worldName) {
+        ResourceKey<Level> worldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
+        if (source.getServer().getLevel(worldKey) == null) {
+            source.sendFailure(Component.literal("§cWorld '" + worldName + "' not found!"));
             return 0;
         }
 
-        // Vérifier si des joueurs sont actuellement dans ce monde
-        for (ServerPlayerEntity player : source.getServer().getPlayerManager().getPlayerList()) {
-            String currentWorld = getBaseWorldName(player.getEntityWorld().getRegistryKey().getValue().getPath());
+        for (ServerPlayer player : source.getServer().getPlayerList().getPlayers()) {
+            String currentWorld = getBaseWorldName(player.level().dimension().identifier().getPath());
             if (currentWorld.equals(worldName)) {
-                // Téléporter le joueur au monde overworld
                 Utils.saveInv(player, currentWorld);
                 Utils.loadInv(player, "overworld");
-                player.sendMessage(Text.literal("§cWorld being deleted! You've been teleported to the overworld."), false);
+                player.sendSystemMessage(Component.literal("§cWorld being deleted! You've been teleported to the overworld."));
             }
         }
 
-        // Confirmation de suppression
-        source.sendMessage(Text.literal("§eDeleting world '" + worldName + "'..."));
+        source.sendSystemMessage(Component.literal("§eDeleting world '" + worldName + "'..."));
 
         try {
-            // Supprimer le monde
             deleteWorld(source.getServer(), worldName);
-            source.sendMessage(Text.literal("§aWorld '" + worldName + "' has been successfully deleted."));
+            source.sendSuccess(() -> Component.literal("§aWorld '" + worldName + "' has been successfully deleted."), false);
             return 1;
         } catch (Exception e) {
-            source.sendMessage(Text.literal("§cError deleting world: " + e.getMessage()));
+            source.sendFailure(Component.literal("§cError deleting world: " + e.getMessage()));
             LOGGER.error("Error deleting world", e);
             return 0;
         }
     }
 
-    public static @NotNull String getSourceWorldName(ServerCommandSource source) {
-        ServerWorld sourceWorld = source.getWorld();
-        RegistryKey<World> sourceWorldKey = sourceWorld.getRegistryKey() == World.END || sourceWorld.getRegistryKey() == World.NETHER ? World.OVERWORLD : sourceWorld.getRegistryKey();
-        String sourceWorldName = sourceWorldKey.getValue().getPath();
+    public static @NotNull String getSourceWorldName(CommandSourceStack source) {
+        ServerLevel sourceWorld = source.getLevel();
+        ResourceKey<Level> sourceWorldKey = sourceWorld.dimension() == Level.END || sourceWorld.dimension() == Level.NETHER ? Level.OVERWORLD : sourceWorld.dimension();
+        String sourceWorldName = sourceWorldKey.identifier().getPath();
         return getBaseWorldName(sourceWorldName);
     }
 }

@@ -2,40 +2,39 @@ package com.gmail.anthony17j.multiworld;
 
 import com.gmail.anthony17j.multiworld.mixin.IMinecraftServerMixin;
 import com.google.common.collect.ImmutableList;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.registry.RegistryKeys;
+import net.minecraft.resources.Identifier;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.Util;
-import net.minecraft.village.ZombieSiegeManager;
-import net.minecraft.world.WanderingTraderManager;
-import net.minecraft.world.World;
-import net.minecraft.world.dimension.DimensionOptions;
-import net.minecraft.world.spawner.CatSpawner;
-import net.minecraft.world.spawner.PatrolSpawner;
-import net.minecraft.world.spawner.PhantomSpawner;
+import net.minecraft.world.entity.ai.village.VillageSiege;
+import net.minecraft.world.entity.npc.CatSpawner;
+import net.minecraft.world.entity.npc.wanderingtrader.WanderingTraderSpawner;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.dimension.LevelStem;
+import net.minecraft.world.level.levelgen.PatrolSpawner;
+import net.minecraft.world.level.levelgen.PhantomSpawner;
+
 import java.util.Objects;
 
 import static com.gmail.anthony17j.multiworld.MultiWorld.CREATIVE_WORLD_NAME;
 import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
+import static net.minecraft.core.registries.Registries.DIMENSION;
 
-public class CustomServerWorld extends ServerWorld {
+public class CustomServerWorld extends ServerLevel {
 
-    public CustomServerWorld(MinecraftServer server, RegistryKey<World> registryKey, DimensionOptions options, CustomServerWorldProperties levelProperties, long seed) {
+    public CustomServerWorld(MinecraftServer server, ResourceKey<Level> registryKey, LevelStem options, CustomServerWorldProperties levelProperties, long seed) {
         super(
                 server,
-                Util.getMainWorkerExecutor(),
+                Util.backgroundExecutor(),
                 ((IMinecraftServerMixin) server).getSession(),
                 levelProperties,
                 registryKey,
                 options,
-                //VoidWorldProgressListener.INSTANCE,
                 false,
-                // BiomeAccess.hashSeed(seed),
                 seed,
                 ImmutableList.of(
-                        new PhantomSpawner(), new PatrolSpawner(), new CatSpawner(), new ZombieSiegeManager(), new WanderingTraderManager(levelProperties)
+                        new PhantomSpawner(), new PatrolSpawner(), new CatSpawner(), new VillageSiege(), new WanderingTraderSpawner(levelProperties)
                 ),
                 true,
                 null
@@ -43,91 +42,79 @@ public class CustomServerWorld extends ServerWorld {
     }
 
     public interface Constructor {
-        CustomServerWorld create(MinecraftServer server, RegistryKey<World> registryKey, DimensionOptions options, CustomServerWorldProperties levelProperties, long seed);
+        CustomServerWorld create(MinecraftServer server, ResourceKey<Level> registryKey, LevelStem options, CustomServerWorldProperties levelProperties, long seed);
     }
 
     @Override
     public long getSeed() {
-        return ((CustomServerWorldProperties)this.properties).seed;
+        return ((CustomServerWorldProperties) this.levelData).seed;
     }
 
-    public RegistryKey<World> getMockRegistryKey() {
-        RegistryKey<World> registryKey = super.getRegistryKey();
-        String path = registryKey.getValue().getPath();
+    public ResourceKey<Level> getMockRegistryKey() {
+        ResourceKey<Level> registryKey = super.dimension();
+        String path = registryKey.identifier().getPath();
         if (path.endsWith("_nether")) {
-            return World.NETHER;
+            return Level.NETHER;
         } else if (path.endsWith("_end")) {
-            return World.END;
+            return Level.END;
         }
-        return World.OVERWORLD;
+        return Level.OVERWORLD;
     }
 
-    public static RegistryKey<World> getRegistryKey(String world) {
-        return RegistryKey.of(
-                RegistryKeys.WORLD,
-                Identifier.of(NAMESPACE, world)
+    public static ResourceKey<Level> getRegistryKey(String world) {
+        return ResourceKey.create(
+                DIMENSION,
+                Identifier.fromNamespaceAndPath(NAMESPACE, world)
         );
     }
 
-    public static RegistryKey<World> getMockRegistryKey(World world) {
+    public static ResourceKey<Level> getMockRegistryKey(Level world) {
         if (world instanceof CustomServerWorld) {
             return ((CustomServerWorld) world).getMockRegistryKey();
         }
-        return world.getRegistryKey();
+        return world.dimension();
     }
 
-    public static RegistryKey<World> getMockRegistryKey(RegistryKey<World> world) {
-        Identifier worldId = world.getValue();
+    public static ResourceKey<Level> getMockRegistryKey(ResourceKey<Level> world) {
+        Identifier worldId = world.identifier();
         if (NAMESPACE.equals(worldId.getNamespace())) {
             String path = worldId.getPath();
 
             if (path.endsWith("_nether")) {
-                return World.NETHER;
+                return Level.NETHER;
             } else if (path.endsWith("_end")) {
-                return World.END;
+                return Level.END;
             } else {
-                return World.OVERWORLD;
+                return Level.OVERWORLD;
             }
         }
         return world;
     }
 
-    public static boolean isCustomEndWorld(RegistryKey<World> key) {
-        return key.getValue().getPath().endsWith("_end") && Objects.equals(key.getValue().getNamespace(), NAMESPACE);
+    public static boolean isCustomEndWorld(ResourceKey<Level> key) {
+        return key.identifier().getPath().endsWith("_end") && Objects.equals(key.identifier().getNamespace(), NAMESPACE);
     }
 
-    public static boolean isCustomNetherWorld(RegistryKey<World> key) {
-        return key.getValue().getPath().endsWith("_nether") && Objects.equals(key.getValue().getNamespace(), NAMESPACE);
+    public static boolean isCustomNetherWorld(ResourceKey<Level> key) {
+        return key.identifier().getPath().endsWith("_nether") && Objects.equals(key.identifier().getNamespace(), NAMESPACE);
     }
 
-    public static boolean isWorldWithNether(RegistryKey<World> key) {
-        if (Objects.equals(key.getValue().getNamespace(), NAMESPACE)) {
-            String path = getBaseWorldName(key.getValue().getPath());
-            RegistryKey<World> worldKey = RegistryKey.of(
-                    RegistryKeys.WORLD,
-                    Identifier.of(NAMESPACE, path)
-            );
-            RegistryKey<World> netherKey = RegistryKey.of(
-                    RegistryKeys.WORLD,
-                    Identifier.of(NAMESPACE, path + "_nether")
-            );
+    public static boolean isWorldWithNether(ResourceKey<Level> key) {
+        if (Objects.equals(key.identifier().getNamespace(), NAMESPACE)) {
+            String path = getBaseWorldName(key.identifier().getPath());
+            ResourceKey<Level> worldKey = ResourceKey.create(DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, path));
+            ResourceKey<Level> netherKey = ResourceKey.create(DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, path + "_nether"));
             return worldKey != null && netherKey != null;
         } else {
             return true;
         }
     }
 
-    public static boolean isWorldWithEnd(RegistryKey<World> key) {
-        if (Objects.equals(key.getValue().getNamespace(), NAMESPACE)) {
-            String path = getBaseWorldName(key.getValue().getPath());
-            RegistryKey<World> worldKey = RegistryKey.of(
-                    RegistryKeys.WORLD,
-                    Identifier.of(NAMESPACE, path)
-            );
-            RegistryKey<World> endKey = RegistryKey.of(
-                    RegistryKeys.WORLD,
-                    Identifier.of(NAMESPACE, path + "_end")
-            );
+    public static boolean isWorldWithEnd(ResourceKey<Level> key) {
+        if (Objects.equals(key.identifier().getNamespace(), NAMESPACE)) {
+            String path = getBaseWorldName(key.identifier().getPath());
+            ResourceKey<Level> worldKey = ResourceKey.create(DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, path));
+            ResourceKey<Level> endKey = ResourceKey.create(DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, path + "_end"));
             return worldKey != null && endKey != null;
         } else {
             return true;
@@ -143,9 +130,9 @@ public class CustomServerWorld extends ServerWorld {
         return path;
     }
 
-    public static boolean isCreativeWorld(RegistryKey<World> key) {
-        if (Objects.equals(key.getValue().getNamespace(), NAMESPACE)) {
-            String path = getBaseWorldName(key.getValue().getPath());
+    public static boolean isCreativeWorld(ResourceKey<Level> key) {
+        if (Objects.equals(key.identifier().getNamespace(), NAMESPACE)) {
+            String path = getBaseWorldName(key.identifier().getPath());
             return path.equals(CREATIVE_WORLD_NAME);
         }
         return false;
