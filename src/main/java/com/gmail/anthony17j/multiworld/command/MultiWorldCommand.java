@@ -153,7 +153,7 @@ public final class MultiWorldCommand {
         Utils.saveInv(player, sourceWorldName);
         Utils.loadInv(player, targetWorldName);
 
-        player.sendSystemMessage(Component.literal("Teleported to " + worldTarget.dimension().identifier().toString() + " !"));
+        player.sendSystemMessage(Component.literal("Teleported to " + worldTarget.dimension().identifier() + " !"));
 
         return 1;
     }
@@ -162,7 +162,10 @@ public final class MultiWorldCommand {
         source.sendSystemMessage(Component.literal("Importing world from " + folderPath + " to " + worldName + "..."));
 
         try {
-            importWorld(source.getServer(), folderPath, worldName);
+            if (!importWorld(source.getServer(), folderPath, worldName)) {
+                source.sendFailure(Component.literal("Error importing world: invalid source folder or missing level.dat"));
+                return 0;
+            }
             source.sendSuccess(() -> Component.literal("World imported successfully!"), false);
             return 1;
         } catch (Exception e) {

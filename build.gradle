@@ -32,6 +32,16 @@ loom {
 
 }
 
+fabricApi {
+	configureTests {
+		createSourceSet = true
+		modId = "multiworld-gametest"
+		enableGameTests = true
+		eula = true
+		clearRunDirectory = true
+	}
+}
+
 configurations {
 	// configuration that holds jars to include in the jar
 	extraLibs
@@ -49,6 +59,7 @@ dependencies {
 	extraLibs group: 'com.github.cliftonlabs', name: 'json-simple', version: '4.0.0'
 
 	configurations.compileClasspath.extendsFrom(configurations.extraLibs)
+	configurations.runtimeClasspath.extendsFrom(configurations.extraLibs)
 }
 
 processResources {
@@ -97,5 +108,24 @@ publishing {
 		// Notice: This block does NOT have the same function as the block in the top level.
 		// The repositories here will be used for publishing your artifact, not for
 		// retrieving dependencies.
+	}
+}
+
+tasks.named("runGameTest") {
+	doFirst {
+		def gameTestRunDir = file("$buildDir/run/gameTest")
+		def propsFile = file("$gameTestRunDir/server.properties")
+
+		if (!gameTestRunDir.exists()) {
+			gameTestRunDir.mkdirs()
+		}
+		if (!propsFile.exists()) {
+			propsFile.createNewFile()
+		}
+
+		def props = new Properties()
+		propsFile.withInputStream { props.load(it) }
+		props.setProperty("level-seed", "424242424242")
+		propsFile.withOutputStream { os -> props.store(os, "Minecraft server properties") }
 	}
 }

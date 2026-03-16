@@ -1,6 +1,7 @@
 package com.gmail.anthony17j.multiworld.mixin;
 
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.dimension.end.EndDragonFight;
 import net.minecraft.world.level.storage.ServerLevelData;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
@@ -9,4 +10,7 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 public interface ServerLevelAccessor {
     @Accessor("serverLevelData")
     ServerLevelData getWorldProperties();
+
+    @Accessor("dragonFight")
+    void setDragonFightAccessor(EndDragonFight dragonFight);
 }
