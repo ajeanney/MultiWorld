@@ -1,10 +1,9 @@
 package com.gmail.anthony17j.multiworld;
 
-import com.github.cliftonlabs.json_simple.JsonObject;
-import com.github.cliftonlabs.json_simple.Jsoner;
 import com.gmail.anthony17j.multiworld.mixin.ServerLevelAccessor;
 import com.gmail.anthony17j.multiworld.mixin.StatsCounterAccessor;
-import com.gmail.anthony17j.multiworld.util.Json;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
@@ -109,7 +108,10 @@ public class Utils {
                 for (File statsFile : statsFiles) {
                     if (statsFile.getName().equals(player.getStringUUID() + ".json")) {
                         try (FileReader statsReader = new FileReader(statsFile)) {
-                            statsJson = (JsonObject) Jsoner.deserialize(statsReader);
+                            JsonElement parsed = JsonParser.parseReader(statsReader);
+                            if (parsed != null && parsed.isJsonObject()) {
+                                statsJson = parsed.getAsJsonObject();
+                            }
                         }
                     }
                 }
@@ -124,14 +126,20 @@ public class Utils {
                 for (File advancementsFile : advancementsFiles) {
                     if (advancementsFile.getName().equals(player.getStringUUID() + ".json")) {
                         try (FileReader advancementsReader = new FileReader(advancementsFile)) {
-                            advancementsJson = (JsonObject) Jsoner.deserialize(advancementsReader);
+                            JsonElement parsed = JsonParser.parseReader(advancementsReader);
+                            if (parsed != null && parsed.isJsonObject()) {
+                                advancementsJson = parsed.getAsJsonObject();
+                            }
                         }
                     }
                 }
             }
 
-            Json uuid = new Json(tag.toString(), statsJson, advancementsJson);
-            Jsoner.serialize(uuid, writer);
+            JsonObject playerJson = new JsonObject();
+            playerJson.addProperty("player", tag.toString());
+            playerJson.add("stats", statsJson);
+            playerJson.add("advancements", advancementsJson);
+            writer.write(playerJson.toString());
             writer.close();
 
         } catch (Exception ex) {
@@ -143,9 +151,10 @@ public class Utils {
         String worldFolder = getWorldFolder(player.level().getServer());
 
         try (FileReader fileReader = new FileReader(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getStringUUID() + ".json")) {
-            JsonObject file = (JsonObject) Jsoner.deserialize(fileReader);
+            JsonElement parsedRoot = JsonParser.parseReader(fileReader);
+            JsonObject file = parsedRoot != null && parsedRoot.isJsonObject() ? parsedRoot.getAsJsonObject() : new JsonObject();
 
-            String playerString = (String) file.get("player");
+            String playerString = file.has("player") ? file.get("player").getAsString() : "{}";
             CompoundTag playerNbt = TagParser.parseCompoundFully(playerString);
                 playerNbt = migratePlayerDataToCurrentVersion(
                     player.level().getServer(),
@@ -178,24 +187,24 @@ public class Utils {
             }
 
             // Load player stats
-            if (file.containsKey("stats")) {
-                JsonObject statsData = (JsonObject) file.get("stats");
+            if (file.has("stats") && file.get("stats").isJsonObject()) {
+                JsonObject statsData = file.getAsJsonObject("stats");
 
                 ServerStatsCounter statHandler = player.getStats();
                 for (Stat<?> stat : ((StatsCounterAccessor) statHandler).getStatMap().keySet()) {
                     player.resetStat(stat);
                 }
 
-                statHandler.parse(player.level().getServer().getFixerUpper(), JsonParser.parseString(statsData.toJson()));
+                statHandler.parse(player.level().getServer().getFixerUpper(), statsData);
                 statHandler.markAllDirty();
             }
 
             // Load player advancements
-            if (file.containsKey("advancements")) {
-                JsonObject advancementsData = (JsonObject) file.get("advancements");
+            if (file.has("advancements") && file.get("advancements").isJsonObject()) {
+                JsonObject advancementsData = file.getAsJsonObject("advancements");
                 Files.write(
                     Paths.get(worldFolder + "/advancements/" + player.getStringUUID() + ".json"),
-                    advancementsData.toJson().getBytes()
+                    advancementsData.toString().getBytes()
                 );
             }
             player.getAdvancements().reload(player.level().getServer().getAdvancements());
@@ -225,13 +234,18 @@ public class Utils {
             JsonObject clearedAdvancementsData = new JsonObject();
             JsonObject advancementsData = new JsonObject();
             try (FileReader advancementsReader = new FileReader(worldFolder + "/advancements/" + player.getStringUUID() + ".json")) {
-                advancementsData = (JsonObject) Jsoner.deserialize(advancementsReader);
+                JsonElement parsed = JsonParser.parseReader(advancementsReader);
+                if (parsed != null && parsed.isJsonObject()) {
+                    advancementsData = parsed.getAsJsonObject();
+                }
             } catch (Exception e) {
                 LOGGER.error("Error loading player advancements: {}", e.getMessage());
             }
-            clearedAdvancementsData.put("DataVersion", advancementsData.get("DataVersion"));
+            if (advancementsData.has("DataVersion")) {
+                clearedAdvancementsData.add("DataVersion", advancementsData.get("DataVersion"));
+            }
             try (BufferedWriter advancementsWriter = Files.newBufferedWriter(Paths.get(worldFolder + "/advancements/" + player.getStringUUID() + ".json"))) {
-                Jsoner.serialize(clearedAdvancementsData, advancementsWriter);
+                advancementsWriter.write(clearedAdvancementsData.toString());
             } catch (Exception e) {
                 LOGGER.error("Error writing cleared advancements: {}", e.getMessage());
             }

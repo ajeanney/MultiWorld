@@ -1,11 +1,12 @@
 package com.gmail.anthony17j.multiworld;
 
-import com.github.cliftonlabs.json_simple.JsonObject;
-import com.github.cliftonlabs.json_simple.Jsoner;
 import com.gmail.anthony17j.multiworld.command.CreativeCommand;
 import com.gmail.anthony17j.multiworld.command.MultiWorldCommand;
 import com.gmail.anthony17j.multiworld.mixin.IMinecraftServerMixin;
 import com.gmail.anthony17j.multiworld.mixin.ServerLevelAccessor;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
@@ -406,27 +407,31 @@ public class MultiWorld implements ModInitializer {
                             updateDimensionInTag(playerData, "LastDeathLocation", worldName);
 
                             JsonObject playerJson = new JsonObject();
-                            playerJson.put("player", playerData.toString());
+                            playerJson.addProperty("player", playerData.toString());
 
                             File statsFile = new File(sourceWorldFolder, "stats/" + uuid + ".json");
                             if (statsFile.exists()) {
                                 try (FileReader statsReader = new FileReader(statsFile)) {
-                                    JsonObject statsJson = (JsonObject) Jsoner.deserialize(statsReader);
-                                    playerJson.put("stats", statsJson);
+                                    JsonElement parsed = JsonParser.parseReader(statsReader);
+                                    if (parsed != null && parsed.isJsonObject()) {
+                                        playerJson.add("stats", parsed.getAsJsonObject());
+                                    }
                                 }
                             }
 
                             File advancementsFile = new File(sourceWorldFolder, "advancements/" + uuid + ".json");
                             if (advancementsFile.exists()) {
                                 try (FileReader advancementsReader = new FileReader(advancementsFile)) {
-                                    JsonObject advancementsJson = (JsonObject) Jsoner.deserialize(advancementsReader);
-                                    playerJson.put("advancements", advancementsJson);
+                                    JsonElement parsed = JsonParser.parseReader(advancementsReader);
+                                    if (parsed != null && parsed.isJsonObject()) {
+                                        playerJson.add("advancements", parsed.getAsJsonObject());
+                                    }
                                 }
                             }
 
                             try (BufferedWriter writer = Files.newBufferedWriter(
                                     Paths.get(worldNameFolder.getPath(), uuid + ".json"))) {
-                                Jsoner.serialize(playerJson, writer);
+                                writer.write(playerJson.toString());
                             }
 
                         } catch (Exception e) {
