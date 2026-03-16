@@ -3,14 +3,15 @@ package com.gmail.anthony17j.multiworld;
 import com.github.cliftonlabs.json_simple.JsonObject;
 import com.github.cliftonlabs.json_simple.Jsoner;
 import com.gmail.anthony17j.multiworld.mixin.ServerLevelAccessor;
-import com.gmail.anthony17j.multiworld.mixin.ServerPlayerAccessor;
 import com.gmail.anthony17j.multiworld.mixin.StatsCounterAccessor;
 import com.gmail.anthony17j.multiworld.util.Json;
 import com.google.gson.JsonParser;
+import net.minecraft.SharedConstants;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.nbt.TagParser;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -20,11 +21,13 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.stats.ServerStatsCounter;
 import net.minecraft.stats.Stat;
 import net.minecraft.util.ProblemReporter;
+import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.portal.TeleportTransition;
 import net.minecraft.world.level.storage.LevelData;
+import net.minecraft.world.level.storage.LevelResource;
 import net.minecraft.world.level.storage.TagValueInput;
 import net.minecraft.world.level.storage.TagValueOutput;
 import net.minecraft.world.level.storage.ValueInput;
@@ -41,9 +44,31 @@ import static com.gmail.anthony17j.multiworld.MultiWorld.LOGGER;
 import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 
 public class Utils {
+    private static String getWorldFolder(MinecraftServer server) {
+        return server.getWorldPath(LevelResource.ROOT).toString();
+    }
+
+    public static CompoundTag migratePlayerDataToCurrentVersion(MinecraftServer server, CompoundTag playerNbt, String context) {
+        int sourceVersion = NbtUtils.getDataVersion(playerNbt, 0);
+        int currentVersion = SharedConstants.getCurrentVersion().dataVersion().version();
+        if (sourceVersion >= currentVersion) {
+            return playerNbt;
+        }
+
+        try {
+            CompoundTag fixed = DataFixTypes.PLAYER.updateToCurrentVersion(server.getFixerUpper(), playerNbt, sourceVersion);
+            NbtUtils.addCurrentDataVersion(fixed);
+            LOGGER.info("Migrated player data '{}' from DataVersion {} to {}", context, sourceVersion, currentVersion);
+            return fixed;
+        } catch (Exception ex) {
+            LOGGER.error("Error migrating player data '{}' from DataVersion {}: {}", context, sourceVersion, ex.getMessage());
+            return playerNbt;
+        }
+    }
+
     public static void saveInv(ServerPlayer player, String world) {
         try {
-            String worldFolder = player.level().getServer().getWorldData().getLevelName();
+            String worldFolder = getWorldFolder(player.level().getServer());
 
             if (new File(worldFolder + "/" + NAMESPACE + "/" + world).mkdirs()) {
                 LOGGER.info("Directory created: {}/{}/{}", worldFolder, NAMESPACE, world);
@@ -51,7 +76,7 @@ public class Utils {
             BufferedWriter writer = Files.newBufferedWriter(Paths.get(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getStringUUID() + ".json"));
 
             TagValueOutput output = TagValueOutput.createWithContext(ProblemReporter.DISCARDING, player.registryAccess());
-            ((ServerPlayerAccessor) player).invokeAddAdditionalSaveData(output);
+            player.saveWithoutId(output);
 
             // Remove ender pearls the player had launched (they will be put back on load)
             player.getEnderPearls().forEach((enderPearl) -> enderPearl.remove(Entity.RemovalReason.DISCARDED));
@@ -115,16 +140,21 @@ public class Utils {
     }
 
     public static void loadInv(ServerPlayer player, String world) {
-        String worldFolder = player.level().getServer().getWorldData().getLevelName();
+        String worldFolder = getWorldFolder(player.level().getServer());
 
         try (FileReader fileReader = new FileReader(worldFolder + "/" + NAMESPACE + "/" + world + "/" + player.getStringUUID() + ".json")) {
             JsonObject file = (JsonObject) Jsoner.deserialize(fileReader);
 
             String playerString = (String) file.get("player");
             CompoundTag playerNbt = TagParser.parseCompoundFully(playerString);
+                playerNbt = migratePlayerDataToCurrentVersion(
+                    player.level().getServer(),
+                    playerNbt,
+                    "loadInv/" + world + "/" + player.getStringUUID()
+                );
 
             ValueInput nbtReadView = TagValueInput.create(ProblemReporter.DISCARDING, player.registryAccess(), playerNbt);
-            ((ServerPlayerAccessor) player).invokeReadAdditionalSaveData(nbtReadView);
+            player.load(nbtReadView);
             player.loadAndSpawnEnderPearls(nbtReadView);
 
             String[] strArr = playerNbt.getString("Dimension").orElse(Level.OVERWORLD.identifier().toString()).split(":");
@@ -179,7 +209,7 @@ public class Utils {
             CompoundTag playerNbt = new CompoundTag();
 
             ValueInput nbtReadView = TagValueInput.create(ProblemReporter.DISCARDING, player.registryAccess(), playerNbt);
-            ((ServerPlayerAccessor) player).invokeReadAdditionalSaveData(nbtReadView);
+            player.load(nbtReadView);
             player.loadAndSpawnEnderPearls(nbtReadView);
 
             player.setRespawnPosition(null, false);
@@ -229,7 +259,7 @@ public class Utils {
     }
 
     public static String getMostRecentWorldSaved(ServerPlayer player, String sourceWorld) {
-        String worldFolder = player.level().getServer().getWorldData().getLevelName();
+        String worldFolder = getWorldFolder(player.level().getServer());
         File folder = new File(worldFolder + "/" + NAMESPACE);
         File[] listOfFiles = folder.listFiles();
         if (listOfFiles != null) {

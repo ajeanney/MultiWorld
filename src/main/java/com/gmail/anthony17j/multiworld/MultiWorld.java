@@ -16,10 +16,12 @@ import net.minecraft.core.Holder;
 import net.minecraft.core.MappedRegistry;
 import net.minecraft.core.RegistrationInfo;
 import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -27,6 +29,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.ProgressListener;
+import net.minecraft.util.datafix.DataFixTypes;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.Biome;
@@ -44,7 +47,6 @@ import net.minecraft.world.level.levelgen.flat.FlatLayerInfo;
 import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
 import net.minecraft.world.level.levelgen.FlatLevelSource;
 import net.minecraft.world.level.storage.LevelData;
-import net.minecraft.world.level.storage.PrimaryLevelData;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import org.slf4j.Logger;
@@ -109,7 +111,7 @@ public class MultiWorld implements ModInitializer {
     }
 
     private static void loadCustomWorlds(MinecraftServer server) {
-        String serverWorldFolder = server.getWorldData().getLevelName();
+        String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
         File dimensionsFolder = new File(serverWorldFolder + "/dimensions/" + NAMESPACE);
 
         if (!dimensionsFolder.exists() || !dimensionsFolder.isDirectory()) {
@@ -171,8 +173,7 @@ public class MultiWorld implements ModInitializer {
                 createWorld(server, worldName, dimensionType, generator, seed, spawnPos, gameMode);
 
             } catch (Exception e) {
-                LOGGER.error("Failed to load world '{}': {}", worldName, e.getMessage());
-                e.printStackTrace();
+                LOGGER.error("Failed to load world '{}'", worldName, e);
             }
         }
     }
@@ -200,7 +201,7 @@ public class MultiWorld implements ModInitializer {
             BlockPos spawnPos,
             GameType gameMode
     ) {
-        String serverWorldFolder = server.getWorldData().getLevelName();
+        String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
         String dimensionPath = serverWorldFolder + "/dimensions/" + NAMESPACE + "/" + worldString + "/data";
         File dimensionDataDir = new File(dimensionPath);
 
@@ -228,7 +229,7 @@ public class MultiWorld implements ModInitializer {
                     FlatLayerInfo layer = layers.get(i);
                     CompoundTag layerNbt = new CompoundTag();
                     layerNbt.putInt("height", layer.getHeight());
-                    layerNbt.putString("block", layer.getBlockState().getBlock().builtInRegistryHolder().key().identifier().toString());
+                    layerNbt.putString("block", BuiltInRegistries.BLOCK.getKey(layer.getBlockState().getBlock()).toString());
                     layersNbt[i] = layerNbt;
                 }
 
@@ -257,8 +258,6 @@ public class MultiWorld implements ModInitializer {
     }
 
     private static ChunkGenerator createGeneratorFromType(MinecraftServer server, String generatorType, CompoundTag configNbt) {
-        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
-        var multiNoiseLookup = server.registryAccess().lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
         var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
 
         return switch (generatorType) {
@@ -294,8 +293,7 @@ public class MultiWorld implements ModInitializer {
                                         .withBiomeAndLayers(layers, Optional.empty(), biome)
                         );
                     } catch (Exception e) {
-                        LOGGER.error("Error reconstructing flat generator: {}", e.getMessage());
-                        e.printStackTrace();
+                        LOGGER.error("Error reconstructing flat generator", e);
                     }
                 }
                 Holder<Biome> plainsBiome = biomeLookup.getOrThrow(Biomes.PLAINS);
@@ -316,29 +314,36 @@ public class MultiWorld implements ModInitializer {
         };
     }
 
-    public static void importWorld(MinecraftServer server, String worldFolderPath, String worldName) {
+    public static boolean importWorld(MinecraftServer server, String worldFolderPath, String worldName) {
         LOGGER.info("Importing world from {} to multiworld:{}", worldFolderPath, worldName);
 
         File sourceWorldFolder = new File(worldFolderPath);
         if (!sourceWorldFolder.exists() || !sourceWorldFolder.isDirectory()) {
             LOGGER.error("Source world folder {} does not exist or is not a directory", worldFolderPath);
-            return;
+            return false;
         }
 
         try {
+            sourceWorldFolder = resolveImportSourceWorldFolder(sourceWorldFolder);
             File levelDatFile = new File(sourceWorldFolder, "level.dat");
             if (!levelDatFile.exists()) {
-                LOGGER.error("level.dat not found in {}", worldFolderPath);
-                return;
+                LOGGER.error("level.dat not found in {}", sourceWorldFolder.getAbsolutePath());
+                return false;
             }
 
-            CompoundTag levelData = NbtIo.readCompressed(levelDatFile.toPath(), NbtAccounter.unlimitedHeap());
+                CompoundTag levelData = NbtIo.readCompressed(levelDatFile.toPath(), NbtAccounter.unlimitedHeap());
+                levelData = DataFixTypes.LEVEL.updateToCurrentVersion(
+                    server.getFixerUpper(),
+                    levelData,
+                    NbtUtils.getDataVersion(levelData, 0)
+                );
+                NbtUtils.addCurrentDataVersion(levelData);
             CompoundTag dataTag = levelData.getCompound("Data").orElseThrow();
             CompoundTag worldGenSettings = dataTag.getCompound("WorldGenSettings").orElseThrow();
             long seed = worldGenSettings.getLong("seed").orElseThrow();
             LOGGER.info("Seed from world: {}", seed);
 
-            String serverWorldFolder = server.getWorldData().getLevelName();
+            String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
 
             ResourceKey<Level> overWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
             ResourceKey<Level> netherWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_nether"));
@@ -362,19 +367,19 @@ public class MultiWorld implements ModInitializer {
 
             if (overworld == null) {
                 LOGGER.error("Failed to create overworld dimension");
-                return;
+                return false;
             }
 
             File multiworldFolder = new File(serverWorldFolder, NAMESPACE);
             if (!multiworldFolder.exists() && !multiworldFolder.mkdirs()) {
                 LOGGER.error("Could not create multiworld directory");
-                return;
+                return false;
             }
 
             File worldNameFolder = new File(multiworldFolder, worldName);
             if (!worldNameFolder.exists() && !worldNameFolder.mkdirs()) {
                 LOGGER.error("Could not create world directory");
-                return;
+                return false;
             }
 
             File playerDataFolder = new File(sourceWorldFolder, "playerdata");
@@ -386,6 +391,12 @@ public class MultiWorld implements ModInitializer {
                             CompoundTag playerData = NbtIo.readCompressed(playerDataFile.toPath(), NbtAccounter.unlimitedHeap());
 
                             String uuid = playerDataFile.getName().replace(".dat", "");
+
+                            playerData = Utils.migratePlayerDataToCurrentVersion(
+                                    server,
+                                    playerData,
+                                    "import/" + worldName + "/" + uuid
+                            );
 
                             updateDimensionInTag(playerData, "respawn", worldName);
 
@@ -426,11 +437,30 @@ public class MultiWorld implements ModInitializer {
             }
 
             LOGGER.info("World import completed successfully!");
+            return true;
 
         } catch (Exception e) {
-            LOGGER.error("Error importing world: {}", e.getMessage());
-            e.printStackTrace();
+            LOGGER.error("Error importing world", e);
+            return false;
         }
+    }
+
+    private static File resolveImportSourceWorldFolder(File sourceWorldFolder) {
+        if (new File(sourceWorldFolder, "level.dat").exists()) {
+            return sourceWorldFolder;
+        }
+
+        File parent = sourceWorldFolder.getParentFile();
+        if (parent != null && new File(parent, "level.dat").exists()) {
+            return parent;
+        }
+
+        File nestedWorld = new File(sourceWorldFolder, "world");
+        if (nestedWorld.isDirectory() && new File(nestedWorld, "level.dat").exists()) {
+            return nestedWorld;
+        }
+
+        return sourceWorldFolder;
     }
 
     private static void updateDimensionInTag(CompoundTag parentTag, String tagName, String worldName) {
@@ -566,14 +596,20 @@ public class MultiWorld implements ModInitializer {
 
         ((CustomSimpleRegistry<?>) dimensionsRegistry).multiWorld$setFrozen(isFrozen);
 
-        PrimaryLevelData levelProperties = (PrimaryLevelData) server.getWorldData().overworldData();
-        CustomServerWorldProperties newLevelProperties = new CustomServerWorldProperties(levelProperties, seed);
+        var levelProperties = server.getWorldData().overworldData();
+        CustomServerWorldProperties newLevelProperties = new CustomServerWorldProperties(server.getWorldData(), levelProperties, seed);
 
         CustomServerWorld.Constructor worldConstructor = CustomServerWorld::new;
         CustomServerWorld addedWorld = worldConstructor.create(server, worldKey, options, newLevelProperties, seed);
 
         if (gameMode != null) {
             ((ServerLevelAccessor) addedWorld).getWorldProperties().setGameType(gameMode);
+        }
+
+        // Set up dragon fight for custom end worlds
+        if (dimensionType == BuiltinDimensionTypes.END) {
+            ((ServerLevelAccessor) addedWorld).setDragonFightAccessor(new net.minecraft.world.level.dimension.end.EndDragonFight(
+                    addedWorld, seed, net.minecraft.world.level.dimension.end.EndDragonFight.Data.DEFAULT));
         }
 
         ((IMinecraftServerMixin) server).getWorlds().put(addedWorld.dimension(), addedWorld);
@@ -663,7 +699,7 @@ public class MultiWorld implements ModInitializer {
             CustomSimpleRegistry.remove(dimensionsRegistry, endWorldKey.identifier());
         }
 
-        String serverWorldFolder = server.getWorldData().getLevelName();
+        String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
 
         if (overworld != null) {
             deleteWorldFiles(serverWorldFolder, overWorldKey);
