@@ -1,6 +1,7 @@
 package com.gmail.anthony17j.multiworld.test;
 
 import net.fabricmc.fabric.api.gametest.v1.GameTest;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.resources.Identifier;
@@ -8,11 +9,15 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.LevelResource;
+import net.minecraft.world.phys.Vec3;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
+import java.util.Set;
 
 import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 import static com.gmail.anthony17j.multiworld.test.TestAssertions.*;
@@ -145,6 +150,75 @@ public class WorldManagementCommandTest {
         });
     }
 
+    @GameTest(maxTicks = 1600)
+    public void importedLegacyWorldRespawnStaysInExpectedSpawnZone(GameTestHelper helper) {
+        ServerPlayer player = createMockServerPlayer(helper);
+        MinecraftServer server = helper.getLevel().getServer();
+
+        ensureAdvancementsDir(server);
+
+        Path fixturePath = resolveLegacyFixturePath(server);
+        if (!Files.exists(fixturePath.resolve("level.dat"))) {
+            helper.fail("Legacy fixture missing level.dat at " + fixturePath);
+            return;
+        }
+
+        runServerCommand(helper, player, "mw import \"" + fixturePath + "\" " + IMPORT_LEGACY_WORLD);
+
+        helper.runAfterDelay(30, () -> {
+            ServerLevel imported = getDimension(server, IMPORT_LEGACY_WORLD);
+            if (imported == null) {
+                helper.fail("Legacy fixture import did not create world: " + IMPORT_LEGACY_WORLD);
+                return;
+            }
+
+            teleportToWorld(helper, player, IMPORT_LEGACY_WORLD);
+
+            helper.runAfterDelay(10, () -> {
+                assertInDimension(helper, player, NAMESPACE, IMPORT_LEGACY_WORLD);
+
+                ServerPlayer respawned = killAndRespawn(player, server);
+                assertInDimension(helper, respawned, NAMESPACE, IMPORT_LEGACY_WORLD);
+
+                BlockPos importedSpawn = imported.getRespawnData().pos();
+                assertNearPosition(helper, respawned, importedSpawn.getX(), importedSpawn.getY(), importedSpawn.getZ(), 40.0, "legacy import respawn zone");
+
+                if (Math.abs(importedSpawn.getX()) <= 8 && Math.abs(importedSpawn.getZ()) <= 8) {
+                    helper.fail("Imported legacy world spawn should not be near 0,0 but was " + importedSpawn);
+                    return;
+                }
+                helper.succeed();
+            });
+        });
+    }
+
+    @GameTest(maxTicks = 1800)
+    public void overworldRespawnUsesZoneNotFixedBlock(GameTestHelper helper) {
+        ServerPlayer player = createMockServerPlayer(helper);
+        MinecraftServer server = helper.getLevel().getServer();
+
+        ensureAdvancementsDir(server);
+        runServerCommand(helper, player, "gamerule keepInventory false");
+
+        helper.runAfterDelay(10, () -> {
+            Set<String> uniqueRespawnBlocks = new HashSet<>();
+            ServerPlayer current = player;
+
+            for (int i = 0; i < 6; i++) {
+                current = killAndRespawn(current, server);
+                assertInDimension(helper, current, "minecraft", "overworld");
+                uniqueRespawnBlocks.add(blockKey(current.position()));
+            }
+
+            if (uniqueRespawnBlocks.size() < 2) {
+                helper.fail("Overworld respawn should vary within spawn zone, but got fixed block: " + uniqueRespawnBlocks);
+                return;
+            }
+
+            helper.succeed();
+        });
+    }
+
     private static void assertNoDimension(GameTestHelper helper, MinecraftServer server, String worldName) {
         if (getDimension(server, worldName) != null) {
             helper.fail("Expected dimension to be deleted: " + worldName);
@@ -204,5 +278,16 @@ public class WorldManagementCommandTest {
 
         return cwd.resolve("src").resolve("gametest").resolve("resources")
                 .resolve("fixtures").resolve("import_legacy_1_17_1");
+    }
+
+    private static ServerPlayer killAndRespawn(ServerPlayer player, MinecraftServer server) {
+        player.kill((ServerLevel) player.level());
+        ServerPlayer respawned = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
+        ServerPlayer listed = server.getPlayerList().getPlayer(respawned.getUUID());
+        return listed != null ? listed : respawned;
+    }
+
+    private static String blockKey(Vec3 pos) {
+        return ((int) Math.floor(pos.x)) + "," + ((int) Math.floor(pos.y)) + "," + ((int) Math.floor(pos.z));
     }
 }

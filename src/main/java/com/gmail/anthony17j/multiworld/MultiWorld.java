@@ -44,6 +44,7 @@ import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.Heightmap;
 import net.minecraft.world.level.levelgen.flat.FlatLayerInfo;
 import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
 import net.minecraft.world.level.levelgen.FlatLevelSource;
@@ -262,8 +263,8 @@ public class MultiWorld implements ModInitializer {
         var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
 
         return switch (generatorType) {
-            case "nether" -> server.getLevel(Level.NETHER).getChunkSource().getGenerator();
-            case "end" -> server.getLevel(Level.END).getChunkSource().getGenerator();
+            case "nether" -> createVanillaNetherGenerator(server);
+            case "end" -> createVanillaEndGenerator(server);
             case "flat" -> {
                 if (configNbt.contains("flatConfig")) {
                     try {
@@ -311,8 +312,35 @@ public class MultiWorld implements ModInitializer {
                                 )
                 );
             }
-            default -> server.overworld().getChunkSource().getGenerator();
+            default -> createVanillaOverworldGenerator(server);
         };
+    }
+
+    private static ChunkGenerator createVanillaOverworldGenerator(MinecraftServer server) {
+        var multiNoiseLookup = server.registryAccess().lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
+        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
+        return new NoiseBasedChunkGenerator(
+                MultiNoiseBiomeSource.createFromPreset(multiNoiseLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)),
+                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.OVERWORLD)
+        );
+    }
+
+    private static ChunkGenerator createVanillaNetherGenerator(MinecraftServer server) {
+        var multiNoiseLookup = server.registryAccess().lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
+        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
+        return new NoiseBasedChunkGenerator(
+                MultiNoiseBiomeSource.createFromPreset(multiNoiseLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER)),
+                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.NETHER)
+        );
+    }
+
+    private static ChunkGenerator createVanillaEndGenerator(MinecraftServer server) {
+        var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
+        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
+        return new NoiseBasedChunkGenerator(
+                TheEndBiomeSource.create(biomeLookup),
+                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.END)
+        );
     }
 
     public static boolean importWorld(MinecraftServer server, String worldFolderPath, String worldName) {
@@ -342,6 +370,11 @@ public class MultiWorld implements ModInitializer {
             CompoundTag dataTag = levelData.getCompound("Data").orElseThrow();
             CompoundTag worldGenSettings = dataTag.getCompound("WorldGenSettings").orElseThrow();
             long seed = worldGenSettings.getLong("seed").orElseThrow();
+                BlockPos importedSpawnPos = new BlockPos(
+                    dataTag.getInt("SpawnX").orElse(0),
+                    dataTag.getInt("SpawnY").orElse(63),
+                    dataTag.getInt("SpawnZ").orElse(0)
+                );
             LOGGER.info("Seed from world: {}", seed);
 
             String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
@@ -362,7 +395,7 @@ public class MultiWorld implements ModInitializer {
                 copyWorldFiles(endFolder, serverWorldFolder, endWorldKey);
             }
 
-            createWorldWithDimensions(server, worldName, seed);
+            createWorldWithDimensions(server, worldName, seed, importedSpawnPos);
 
             ServerLevel overworld = server.getLevel(overWorldKey);
 
@@ -534,21 +567,15 @@ public class MultiWorld implements ModInitializer {
     }
 
     public static void createWorldWithDimensions(MinecraftServer server, String worldString, long seed) {
-        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
-        var multiNoiseLookup = server.registryAccess().lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
-        var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
+        createWorldWithDimensions(server, worldString, seed, null);
+    }
 
-        ChunkGenerator overworldGenerator = new NoiseBasedChunkGenerator(
-                MultiNoiseBiomeSource.createFromPreset(multiNoiseLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)),
-                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.OVERWORLD));
-        ChunkGenerator netherGenerator = new NoiseBasedChunkGenerator(
-                MultiNoiseBiomeSource.createFromPreset(multiNoiseLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER)),
-                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.NETHER));
-        ChunkGenerator endGenerator = new NoiseBasedChunkGenerator(
-                TheEndBiomeSource.create(biomeLookup),
-                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.END));
+    public static void createWorldWithDimensions(MinecraftServer server, String worldString, long seed, BlockPos spawnPos) {
+        ChunkGenerator overworldGenerator = createVanillaOverworldGenerator(server);
+        ChunkGenerator netherGenerator = createVanillaNetherGenerator(server);
+        ChunkGenerator endGenerator = createVanillaEndGenerator(server);
 
-        createWorld(server, worldString, BuiltinDimensionTypes.OVERWORLD, overworldGenerator, seed, null, null);
+        createWorld(server, worldString, BuiltinDimensionTypes.OVERWORLD, overworldGenerator, seed, spawnPos, null);
         createWorld(server, worldString + "_nether", BuiltinDimensionTypes.NETHER, netherGenerator, seed, null, null);
         createWorld(server, worldString + "_end", BuiltinDimensionTypes.END, endGenerator, seed, null, null);
     }
@@ -619,13 +646,31 @@ public class MultiWorld implements ModInitializer {
 
         ((IMinecraftServerMixin) server).getWorlds().put(addedWorld.dimension(), addedWorld);
 
+        BlockPos resolvedSpawn;
         if (spawnPos != null) {
-            newLevelProperties.setSpawn(new LevelData.RespawnData(new GlobalPos(worldKey, spawnPos), 0.0F, 0.0F));
+            // Keep configured X/Z but place Y on a valid surface for reliable respawn.
+            int surfaceY = addedWorld.getHeight(Heightmap.Types.MOTION_BLOCKING, spawnPos.getX(), spawnPos.getZ());
+            int safeY = surfaceY > addedWorld.getMinY() ? surfaceY : 63;
+            resolvedSpawn = new BlockPos(spawnPos.getX(), safeY, spawnPos.getZ());
         } else {
-            IMinecraftServerMixin.invokeSetupSpawn(addedWorld, newLevelProperties, false, false, server.getLevelLoadListener());
+            // Use the exact vanilla initial spawn pipeline.
+            IMinecraftServerMixin.invokeSetupSpawn(
+                    addedWorld,
+                    newLevelProperties,
+                    false,
+                    false,
+                    ((IMinecraftServerMixin) server).multiWorld$getLevelLoadListener()
+            );
+            LevelData.RespawnData respawnData = newLevelProperties.getRespawnData();
+            if (respawnData != null) {
+                resolvedSpawn = respawnData.pos();
+            } else {
+                resolvedSpawn = BlockPos.ZERO.above(80);
+            }
         }
-
         ServerWorldEvents.LOAD.invoker().onWorldLoad(server, addedWorld);
+
+        newLevelProperties.setSpawn(new LevelData.RespawnData(new GlobalPos(worldKey, resolvedSpawn), 0.0F, 0.0F));
 
         saveWorldConfig(
                 server,

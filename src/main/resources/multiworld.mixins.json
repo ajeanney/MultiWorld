@@ -21,8 +21,10 @@
     "ServerLevelAccessor",
     "ServerLevelMixin",
     "MappedRegistryMixin",
+    "PlayerSpawnFinderAccessor",
     "StatsCounterAccessor",
-    "TeleportTransitionMixin"
+    "TeleportTransitionMixin",
+    "TeleportTransitionAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

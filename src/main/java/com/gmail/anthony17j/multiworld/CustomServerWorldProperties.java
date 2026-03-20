@@ -12,6 +12,7 @@ import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.level.storage.WorldData;
 import net.minecraft.world.level.timers.TimerCallbacks;
 import net.minecraft.world.level.timers.TimerQueue;
+import org.jspecify.annotations.NonNull;
 
 import java.util.UUID;
 
@@ -42,7 +43,7 @@ public final class CustomServerWorldProperties extends DerivedLevelData {
 
         this.seed = seed;
 
-        this.respawnData = levelProperties.getRespawnData();
+        this.respawnData = null;
         this.gameTime = levelProperties.getGameTime();
         this.dayTime = levelProperties.getDayTime();
         this.clearWeatherTime = levelProperties.getClearWeatherTime();
@@ -50,7 +51,7 @@ public final class CustomServerWorldProperties extends DerivedLevelData {
         this.rainTime = levelProperties.getRainTime();
         this.thundering = levelProperties.isThundering();
         this.thunderTime = levelProperties.getThunderTime();
-        this.initialized = levelProperties.isInitialized();
+        this.initialized = false;
         this.gameType = levelProperties.getGameType();
         this.allowCommands = levelProperties.isAllowCommands();
         this.difficulty = levelProperties.getDifficulty();
@@ -66,12 +67,12 @@ public final class CustomServerWorldProperties extends DerivedLevelData {
     }
 
     @Override
-    public LevelData.RespawnData getRespawnData() {
+    public LevelData.@NonNull RespawnData getRespawnData() {
         return this.respawnData;
     }
 
     @Override
-    public void setSpawn(LevelData.RespawnData respawnData) {
+    public void setSpawn(LevelData.@NonNull RespawnData respawnData) {
         this.respawnData = respawnData;
     }
 
@@ -156,12 +157,12 @@ public final class CustomServerWorldProperties extends DerivedLevelData {
     }
 
     @Override
-    public GameType getGameType() {
+    public @NonNull GameType getGameType() {
         return this.gameType;
     }
 
     @Override
-    public void setGameType(GameType gameType) {
+    public void setGameType(@NonNull GameType gameType) {
         this.gameType = gameType;
     }
 
@@ -171,7 +172,7 @@ public final class CustomServerWorldProperties extends DerivedLevelData {
     }
 
     @Override
-    public Difficulty getDifficulty() {
+    public @NonNull Difficulty getDifficulty() {
         return this.difficulty;
     }
 
@@ -181,12 +182,12 @@ public final class CustomServerWorldProperties extends DerivedLevelData {
     }
 
     @Override
-    public GameRules getGameRules() {
+    public @NonNull GameRules getGameRules() {
         return this.gameRules;
     }
 
     @Override
-    public TimerQueue<MinecraftServer> getScheduledEvents() {
+    public @NonNull TimerQueue<MinecraftServer> getScheduledEvents() {
         return this.scheduledEvents;
     }
 
@@ -211,12 +212,12 @@ public final class CustomServerWorldProperties extends DerivedLevelData {
     }
 
     @Override
-    public UUID getWanderingTraderId() {
+    public @NonNull UUID getWanderingTraderId() {
         return this.wanderingTraderId;
     }
 
     @Override
-    public void setWanderingTraderId(UUID uuid) {
+    public void setWanderingTraderId(@NonNull UUID uuid) {
         this.wanderingTraderId = uuid;
     }
 }
