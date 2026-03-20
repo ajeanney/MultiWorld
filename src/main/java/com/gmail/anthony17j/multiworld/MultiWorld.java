@@ -10,6 +10,7 @@ import com.google.gson.JsonParser;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerWorldEvents;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.GlobalPos;
@@ -22,6 +23,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
@@ -51,6 +53,7 @@ import net.minecraft.world.level.levelgen.FlatLevelSource;
 import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.gamerules.GameRules;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,7 +65,9 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.gmail.anthony17j.multiworld.CustomServerWorld.getBaseWorldName;
@@ -76,6 +81,9 @@ public class MultiWorld implements ModInitializer {
 
     public static final String CREATIVE_WORLD_NAME = "creative";
     private static final String CONFIG_FILE_NAME = "multiworld.dat";
+    private static final int GAME_RULE_AUTOSAVE_INTERVAL_TICKS = 100;
+    private static int gameRuleAutosaveCooldown = GAME_RULE_AUTOSAVE_INTERVAL_TICKS;
+    private static final Map<ResourceKey<Level>, String> LAST_SAVED_GAMERULE_SNAPSHOTS = new HashMap<>();
 
     @Override
     public void onInitialize() {
@@ -109,6 +117,13 @@ public class MultiWorld implements ModInitializer {
                     new FlatLevelGeneratorSettings(Optional.empty(), endBiome, List.of())
                             .withBiomeAndLayers(List.of(), Optional.empty(), endBiome)
             ), BlockPos.ZERO, GameType.CREATIVE);
+        });
+
+        ServerTickEvents.END_SERVER_TICK.register(MultiWorld::autosaveCustomWorldGameRules);
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            persistCustomWorldGameRules(server, true);
+            LAST_SAVED_GAMERULE_SNAPSHOTS.clear();
+            gameRuleAutosaveCooldown = GAME_RULE_AUTOSAVE_INTERVAL_TICKS;
         });
     }
 
@@ -172,7 +187,20 @@ public class MultiWorld implements ModInitializer {
                     gameMode = GameType.byId(gameModeIndex);
                 }
 
+                GameRules loadedGameRules = configNbt.contains("gameRules")
+                        ? decodeGameRules(server, configNbt.getCompound("gameRules").orElse(new CompoundTag()))
+                        : new GameRules(server.getWorldData().enabledFeatures());
+
                 createWorld(server, worldName, dimensionType, generator, seed, spawnPos, gameMode);
+
+                ServerLevel loadedWorld = server.getLevel(worldKey);
+                if (loadedWorld != null) {
+                    ((ServerLevelAccessor) loadedWorld)
+                            .getWorldProperties()
+                            .getGameRules()
+                            .setAll(loadedGameRules, server);
+                    LAST_SAVED_GAMERULE_SNAPSHOTS.put(worldKey, encodeGameRules(server, loadedGameRules).toString());
+                }
 
             } catch (Exception e) {
                 LOGGER.error("Failed to load world '{}'", worldName, e);
@@ -201,7 +229,8 @@ public class MultiWorld implements ModInitializer {
             String generatorType,
             long seed,
             BlockPos spawnPos,
-            GameType gameMode
+            GameType gameMode,
+            GameRules gameRules
     ) {
         String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
         String dimensionPath = serverWorldFolder + "/dimensions/" + NAMESPACE + "/" + worldString + "/data";
@@ -251,6 +280,10 @@ public class MultiWorld implements ModInitializer {
 
             if (gameMode != null) {
                 configNbt.putInt("gameMode", gameMode.getId());
+            }
+
+            if (gameRules != null) {
+                configNbt.put("gameRules", encodeGameRules(server, gameRules));
             }
 
             NbtIo.writeCompressed(configNbt, configFile.toPath());
@@ -680,7 +713,8 @@ public class MultiWorld implements ModInitializer {
                 generator instanceof FlatLevelSource ? "flat" : worldString.endsWith("_nether") ? "nether" : worldString.endsWith("_end") ? "end" : "overworld",
                 seed,
                 spawnPos,
-                gameMode
+                gameMode,
+                newLevelProperties.getGameRules()
         );
 
         LOGGER.info("Successfully loaded world '{}'", worldString);
@@ -795,5 +829,63 @@ public class MultiWorld implements ModInitializer {
             }
         }
         folder.delete();
+    }
+
+    private static CompoundTag encodeGameRules(MinecraftServer server, GameRules gameRules) {
+        Object encoded = GameRules.codec(server.getWorldData().enabledFeatures())
+                .encodeStart(NbtOps.INSTANCE, gameRules)
+                .result()
+                .orElse(null);
+        if (encoded instanceof CompoundTag compoundTag) {
+            return compoundTag;
+        }
+        return new CompoundTag();
+    }
+
+    private static GameRules decodeGameRules(MinecraftServer server, CompoundTag gameRulesTag) {
+        return GameRules.codec(server.getWorldData().enabledFeatures())
+                .parse(NbtOps.INSTANCE, gameRulesTag)
+                .result()
+                .orElseGet(() -> new GameRules(server.getWorldData().enabledFeatures()));
+    }
+
+    private static void autosaveCustomWorldGameRules(MinecraftServer server) {
+        if (--gameRuleAutosaveCooldown > 0) {
+            return;
+        }
+        gameRuleAutosaveCooldown = GAME_RULE_AUTOSAVE_INTERVAL_TICKS;
+        persistCustomWorldGameRules(server, false);
+    }
+
+    private static void persistCustomWorldGameRules(MinecraftServer server, boolean force) {
+        for (ServerLevel world : server.getAllLevels()) {
+            if (!NAMESPACE.equals(world.dimension().identifier().getNamespace())) {
+                continue;
+            }
+
+            ResourceKey<Level> worldKey = world.dimension();
+            CompoundTag encodedRules = encodeGameRules(server, ((ServerLevelAccessor) world).getWorldProperties().getGameRules());
+            String currentSnapshot = encodedRules.toString();
+            String previousSnapshot = LAST_SAVED_GAMERULE_SNAPSHOTS.get(worldKey);
+            if (!force && currentSnapshot.equals(previousSnapshot)) {
+                continue;
+            }
+
+            String worldName = world.dimension().identifier().getPath();
+            String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
+            File configFile = new File(serverWorldFolder + "/dimensions/" + NAMESPACE + "/" + worldName + "/data/" + CONFIG_FILE_NAME);
+            if (!configFile.exists()) {
+                continue;
+            }
+
+            try {
+                CompoundTag configNbt = NbtIo.readCompressed(configFile.toPath(), NbtAccounter.unlimitedHeap());
+                configNbt.put("gameRules", encodedRules);
+                NbtIo.writeCompressed(configNbt, configFile.toPath());
+                LAST_SAVED_GAMERULE_SNAPSHOTS.put(worldKey, currentSnapshot);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to persist gamerules for world '{}': {}", worldName, e.getMessage());
+            }
+        }
     }
 }
