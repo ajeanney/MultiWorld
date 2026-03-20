@@ -82,13 +82,13 @@ public abstract class TeleportTransitionMixin {
         Level entityWorld = entity.level();
         if (Objects.equals(entityWorld.dimension().identifier().getNamespace(), NAMESPACE)) {
             String worldName = getBaseWorldName(entityWorld.dimension().identifier().getPath());
-            ResourceKey<Level> targetKey = getRegistryKey(worldName);
-            ServerLevel targetWorld = world.getServer().getLevel(targetKey);
-            if (targetWorld != null) {
-                MultiWorld.LOGGER.info("Redirect findAdjustedSharedSpawnPos: use entity world spawn for {}", entityWorld.dimension().identifier());
-                return Vec3.atBottomCenterOf(targetWorld.getRespawnData().pos());
+            if (worldName.equals(MultiWorld.CREATIVE_WORLD_NAME)) {
+                // Keep creative world respawn fixed at configured spawn.
+                return Vec3.atBottomCenterOf(world.getRespawnData().pos());
             }
         }
-        return Vec3.atBottomCenterOf(world.getRespawnData().pos());
+        // Preserve vanilla adjusted spawn behavior (spawn zone, safe location search).
+        return TeleportTransitionAccessor.invokeFindAdjustedSharedSpawnPos(world, entity);
     }
+
 }

@@ -10,11 +10,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.biome.BiomeManager;
 import net.minecraft.world.level.dimension.LevelStem;
 import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.storage.LevelData;
 import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.level.storage.ServerLevelData;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.*;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import org.spongepowered.asm.mixin.injection.invoke.arg.Args;
 
 import java.util.List;
@@ -62,5 +64,13 @@ public abstract class ServerLevelMixin {
             return seed;
         }
         return instance.seed();
+    }
+
+    @Inject(method = "getRespawnData", at = @At("HEAD"), cancellable = true)
+    private void useCustomWorldRespawnData(CallbackInfoReturnable<LevelData.RespawnData> cir) {
+        ServerLevel level = (ServerLevel) (Object) this;
+        if (Objects.equals(level.dimension().identifier().getNamespace(), NAMESPACE)) {
+            cir.setReturnValue(((ServerLevelAccessor) level).getWorldProperties().getRespawnData());
+        }
     }
 }

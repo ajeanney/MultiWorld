@@ -25,4 +25,7 @@ public interface IMinecraftServerMixin {
     static void invokeSetupSpawn(ServerLevel world, ServerLevelData worldProperties, boolean bonusChest, boolean debugWorld, LevelLoadListener loadProgress) {
         throw new AssertionError();
     }
+
+    @Invoker("getLevelLoadListener")
+    LevelLoadListener multiWorld$getLevelLoadListener();
 }

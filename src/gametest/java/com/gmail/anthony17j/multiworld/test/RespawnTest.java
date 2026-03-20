@@ -28,7 +28,11 @@ import static com.gmail.anthony17j.multiworld.test.TestAssertions.*;
 public class RespawnTest {
 
     private static final double BED_TOLERANCE = 5.0;
+    private static final double SPAWN_ZONE_TOLERANCE = 40.0;
     private static final String RESPawn_WORLD = SHARED_TEST_WORLD;
+    private static final String CREATIVE_WORLD = "creative";
+    private static final long FIXED_SEED_SPAWN_TEST_SEED = -2831322041033427943L;
+    private static final String FIXED_SEED_SPAWN_WORLD = "seed_spawn_world";
 
     // ========================
     // Overworld respawn tests
@@ -126,6 +130,7 @@ public class RespawnTest {
             // --- 1. Kill in custom world -> respawn in custom world ---
             current = killAndRespawn(current, server);
             assertInDimension(helper, current, NAMESPACE, RESPawn_WORLD);
+            assertRespawnNearWorldSpawn(helper, current, customLevel, "custom world spawn after death");
 
             // --- 2. Place bed in custom world, set spawn, kill -> respawn at bed ---
             BlockPos bedPos = current.blockPosition().offset(3, 0, 0);
@@ -135,6 +140,7 @@ public class RespawnTest {
 
             current = killAndRespawn(current, server);
             assertInDimension(helper, current, NAMESPACE, RESPawn_WORLD);
+            assertRespawnNearWorldSpawn(helper, current, customLevel, "custom world fallback spawn after broken bed");
             assertNearPosition(helper, current, bedPos.getX(), bedPos.getY(), bedPos.getZ(),
                 BED_TOLERANCE, "respawn at custom-world bed");
 
@@ -181,6 +187,58 @@ public class RespawnTest {
         });
     }
 
+    @GameTest(maxTicks = 1200)
+    public void creativeWorldRespawnUsesCreativeSpawn(GameTestHelper helper) {
+        ServerPlayer player = createMockServerPlayer(helper);
+        MinecraftServer server = helper.getLevel().getServer();
+        ensureAdvancementsDir(server);
+
+        teleportToWorld(helper, player, CREATIVE_WORLD);
+        helper.runAfterDelay(10, () -> {
+            assertInDimension(helper, player, NAMESPACE, CREATIVE_WORLD);
+            ServerLevel creative = (ServerLevel) player.level();
+
+            BlockPos creativeSpawn = creative.getRespawnData().pos();
+            if (creativeSpawn.getX() != 0 || creativeSpawn.getZ() != 0) {
+                helper.fail("Creative world spawn must stay at X/Z 0,0 but was " + creativeSpawn);
+                return;
+            }
+            if (creativeSpawn.getY() < 63) {
+                helper.fail("Creative world spawn Y must be at least 63 but was " + creativeSpawn);
+                return;
+            }
+
+            ServerPlayer respawned = killAndRespawn(player, server);
+            assertInDimension(helper, respawned, NAMESPACE, CREATIVE_WORLD);
+            assertRespawnNearWorldSpawn(helper, respawned, creative, "creative world spawn after death");
+
+            helper.succeed();
+        });
+    }
+
+    @GameTest(maxTicks = 1600)
+    public void fixedSeedWorldSpawnMatchesExpectedZone(GameTestHelper helper) {
+        ServerPlayer player = createMockServerPlayer(helper);
+        MinecraftServer server = helper.getLevel().getServer();
+        ensureAdvancementsDir(server);
+
+        String fixedSeedWorldName = FIXED_SEED_SPAWN_WORLD + "_" + Long.toUnsignedString(System.nanoTime(), 36);
+
+        createWorld(helper, player, fixedSeedWorldName, FIXED_SEED_SPAWN_TEST_SEED);
+        teleportToWorld(helper, player, fixedSeedWorldName);
+
+        helper.runAfterDelay(10, () -> {
+            assertInDimension(helper, player, NAMESPACE, fixedSeedWorldName);
+            assertNearPosition(helper, player, 395, 70, 276, 35.0, "fixed-seed initial spawn zone");
+
+            ServerPlayer respawned = killAndRespawn(player, server);
+            assertInDimension(helper, respawned, NAMESPACE, fixedSeedWorldName);
+            assertNearPosition(helper, respawned, 395, 70, 276, 35.0, "fixed-seed respawn zone");
+
+            helper.succeed();
+        });
+    }
+
     // --- Helpers ---
 
     private static void teleportToDimension(GameTestHelper helper, ServerPlayer player, MinecraftServer server, String dimension) {
@@ -208,6 +266,11 @@ public class RespawnTest {
         ServerPlayer respawned = server.getPlayerList().respawn(player, false, Entity.RemovalReason.KILLED);
         ServerPlayer listed = server.getPlayerList().getPlayer(respawned.getUUID());
         return listed != null ? listed : respawned;
+    }
+
+    private static void assertRespawnNearWorldSpawn(GameTestHelper helper, ServerPlayer player, ServerLevel level, String context) {
+        BlockPos spawn = level.getRespawnData().pos();
+        assertNearPosition(helper, player, spawn.getX(), spawn.getY(), spawn.getZ(), SPAWN_ZONE_TOLERANCE, context);
     }
 
     private static void placeBedWithPlatform(ServerLevel level, BlockPos footPos, Direction facing) {
