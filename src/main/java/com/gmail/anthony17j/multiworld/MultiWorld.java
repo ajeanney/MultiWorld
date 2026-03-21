@@ -65,10 +65,14 @@ import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.StreamSupport;
 
 import static com.gmail.anthony17j.multiworld.CustomServerWorld.getBaseWorldName;
 
@@ -79,11 +83,27 @@ public class MultiWorld implements ModInitializer {
     public static final String NAMESPACE = "multiworld";
     public static final ResourceKey<DimensionType> DEFAULT_DIM_TYPE = ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.fromNamespaceAndPath(NAMESPACE, "default"));
 
-    public static final String CREATIVE_WORLD_NAME = "creative";
     private static final String CONFIG_FILE_NAME = "multiworld.dat";
     private static final int GAME_RULE_AUTOSAVE_INTERVAL_TICKS = 100;
     private static int gameRuleAutosaveCooldown = GAME_RULE_AUTOSAVE_INTERVAL_TICKS;
     private static final Map<ResourceKey<Level>, String> LAST_SAVED_GAMERULE_SNAPSHOTS = new HashMap<>();
+    private static final Set<String> CREATIVE_MODE_BASE_WORLDS = new HashSet<>();
+
+    public enum WorldMode {
+        NORMAL,
+        CREATIVE;
+
+        public static WorldMode fromString(String value) {
+            if ("creative".equalsIgnoreCase(value)) {
+                return CREATIVE;
+            }
+            return NORMAL;
+        }
+
+        public String toConfigValue() {
+            return this == CREATIVE ? "creative" : "normal";
+        }
+    }
 
     @Override
     public void onInitialize() {
@@ -91,40 +111,43 @@ public class MultiWorld implements ModInitializer {
         CommandRegistrationCallback.EVENT.register(MultiWorldCommand::register);
 
         ServerLifecycleEvents.SERVER_STARTED.register((MinecraftServer server) -> {
+            CREATIVE_MODE_BASE_WORLDS.clear();
             loadCustomWorlds(server);
-
-            Holder<Biome> voidBiome = server.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_VOID);
-            Holder<Biome> netherBiome = server.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.NETHER_WASTES);
-            Holder<Biome> endBiome = server.registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.THE_END);
-
-            createWorld(server, CREATIVE_WORLD_NAME, BuiltinDimensionTypes.OVERWORLD, new FlatLevelSource(
-                    new FlatLevelGeneratorSettings(Optional.empty(), voidBiome, List.of())
-                            .withBiomeAndLayers(
-                                    List.of(
-                                            new FlatLayerInfo(1, Blocks.BEDROCK),
-                                            new FlatLayerInfo(61, Blocks.DIRT),
-                                            new FlatLayerInfo(1, Blocks.GRASS_BLOCK)
-                                    ),
-                                    Optional.empty(),
-                                    voidBiome
-                            )
-            ), BlockPos.ZERO, GameType.CREATIVE);
-            createWorld(server, CREATIVE_WORLD_NAME + "_nether", BuiltinDimensionTypes.NETHER, new FlatLevelSource(
-                    new FlatLevelGeneratorSettings(Optional.empty(), netherBiome, List.of())
-                            .withBiomeAndLayers(List.of(), Optional.empty(), netherBiome)
-            ), BlockPos.ZERO, GameType.CREATIVE);
-            createWorld(server, CREATIVE_WORLD_NAME + "_end", BuiltinDimensionTypes.END, new FlatLevelSource(
-                    new FlatLevelGeneratorSettings(Optional.empty(), endBiome, List.of())
-                            .withBiomeAndLayers(List.of(), Optional.empty(), endBiome)
-            ), BlockPos.ZERO, GameType.CREATIVE);
         });
 
         ServerTickEvents.END_SERVER_TICK.register(MultiWorld::autosaveCustomWorldGameRules);
         ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
             persistCustomWorldGameRules(server, true);
             LAST_SAVED_GAMERULE_SNAPSHOTS.clear();
+            CREATIVE_MODE_BASE_WORLDS.clear();
             gameRuleAutosaveCooldown = GAME_RULE_AUTOSAVE_INTERVAL_TICKS;
         });
+    }
+
+    public static boolean isCreativeModeWorld(ResourceKey<Level> key) {
+        if (!NAMESPACE.equals(key.identifier().getNamespace())) {
+            return false;
+        }
+        return CREATIVE_MODE_BASE_WORLDS.contains(getBaseWorldName(key.identifier().getPath()));
+    }
+
+    public static Optional<String> getCreativeWorldName(MinecraftServer server) {
+        return StreamSupport.stream(server.getAllLevels().spliterator(), false)
+                .filter(level -> NAMESPACE.equals(level.dimension().identifier().getNamespace()))
+                .map(level -> getBaseWorldName(level.dimension().identifier().getPath()))
+                .distinct()
+                .filter(CREATIVE_MODE_BASE_WORLDS::contains)
+                .sorted(Comparator.naturalOrder())
+                .findFirst();
+    }
+
+    private static void registerWorldMode(String worldName, WorldMode mode) {
+        String baseWorldName = getBaseWorldName(worldName);
+        if (mode == WorldMode.CREATIVE) {
+            CREATIVE_MODE_BASE_WORLDS.add(baseWorldName);
+        } else {
+            CREATIVE_MODE_BASE_WORLDS.remove(baseWorldName);
+        }
     }
 
     private static void loadCustomWorlds(MinecraftServer server) {
@@ -187,11 +210,16 @@ public class MultiWorld implements ModInitializer {
                     gameMode = GameType.byId(gameModeIndex);
                 }
 
+                WorldMode worldMode = configNbt.contains("worldMode")
+                    ? WorldMode.fromString(configNbt.getString("worldMode").orElse("normal"))
+                    : (gameMode == GameType.CREATIVE ? WorldMode.CREATIVE : WorldMode.NORMAL);
+
                 GameRules loadedGameRules = configNbt.contains("gameRules")
                         ? decodeGameRules(server, configNbt.getCompound("gameRules").orElse(new CompoundTag()))
                         : new GameRules(server.getWorldData().enabledFeatures());
 
-                createWorld(server, worldName, dimensionType, generator, seed, spawnPos, gameMode);
+                createWorld(server, worldName, dimensionType, generator, seed, spawnPos, gameMode, worldMode);
+                registerWorldMode(worldName, worldMode);
 
                 ServerLevel loadedWorld = server.getLevel(worldKey);
                 if (loadedWorld != null) {
@@ -230,6 +258,7 @@ public class MultiWorld implements ModInitializer {
             long seed,
             BlockPos spawnPos,
             GameType gameMode,
+                WorldMode worldMode,
             GameRules gameRules
     ) {
         String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
@@ -280,6 +309,10 @@ public class MultiWorld implements ModInitializer {
 
             if (gameMode != null) {
                 configNbt.putInt("gameMode", gameMode.getId());
+            }
+
+            if (worldMode != null) {
+                configNbt.putString("worldMode", worldMode.toConfigValue());
             }
 
             if (gameRules != null) {
@@ -600,21 +633,67 @@ public class MultiWorld implements ModInitializer {
     }
 
     public static void createWorldWithDimensions(MinecraftServer server, String worldString, long seed) {
-        createWorldWithDimensions(server, worldString, seed, null);
+        createWorldWithDimensions(server, worldString, seed, null, "normal", WorldMode.NORMAL);
     }
 
     public static void createWorldWithDimensions(MinecraftServer server, String worldString, long seed, BlockPos spawnPos) {
-        ChunkGenerator overworldGenerator = createVanillaOverworldGenerator(server);
-        ChunkGenerator netherGenerator = createVanillaNetherGenerator(server);
-        ChunkGenerator endGenerator = createVanillaEndGenerator(server);
+        createWorldWithDimensions(server, worldString, seed, spawnPos, "normal", WorldMode.NORMAL);
+        }
 
-        createWorld(server, worldString, BuiltinDimensionTypes.OVERWORLD, overworldGenerator, seed, spawnPos, null);
-        createWorld(server, worldString + "_nether", BuiltinDimensionTypes.NETHER, netherGenerator, seed, null, null);
-        createWorld(server, worldString + "_end", BuiltinDimensionTypes.END, endGenerator, seed, null, null);
+        public static void createWorldWithDimensions(
+            MinecraftServer server,
+            String worldString,
+            long seed,
+            BlockPos spawnPos,
+            String preset,
+            WorldMode worldMode
+        ) {
+        ChunkGenerator overworldGenerator;
+        ChunkGenerator netherGenerator;
+        ChunkGenerator endGenerator;
+
+        boolean flatPreset = "flat".equalsIgnoreCase(preset);
+        if (flatPreset) {
+            var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
+            Holder<Biome> voidBiome = biomeLookup.getOrThrow(Biomes.THE_VOID);
+
+            overworldGenerator = new FlatLevelSource(
+                new FlatLevelGeneratorSettings(Optional.empty(), voidBiome, List.of())
+                    .withBiomeAndLayers(
+                        List.of(
+                            new FlatLayerInfo(1, Blocks.BEDROCK),
+                            new FlatLayerInfo(125, Blocks.DIRT),
+                            new FlatLayerInfo(1, Blocks.GRASS_BLOCK)
+                        ),
+                        Optional.empty(),
+                        voidBiome
+                    )
+            );
+            netherGenerator = new FlatLevelSource(
+                new FlatLevelGeneratorSettings(Optional.empty(), voidBiome, List.of())
+                    .withBiomeAndLayers(List.of(), Optional.empty(), voidBiome)
+            );
+            endGenerator = new FlatLevelSource(
+                new FlatLevelGeneratorSettings(Optional.empty(), voidBiome, List.of())
+                    .withBiomeAndLayers(List.of(), Optional.empty(), voidBiome)
+            );
+        } else {
+            overworldGenerator = createVanillaOverworldGenerator(server);
+            netherGenerator = createVanillaNetherGenerator(server);
+            endGenerator = createVanillaEndGenerator(server);
+        }
+
+        GameType gameMode = worldMode == WorldMode.CREATIVE ? GameType.CREATIVE : null;
+        BlockPos effectiveSpawnPos = worldMode == WorldMode.CREATIVE ? BlockPos.ZERO : spawnPos;
+
+        createWorld(server, worldString, BuiltinDimensionTypes.OVERWORLD, overworldGenerator, seed, effectiveSpawnPos, gameMode, worldMode);
+        createWorld(server, worldString + "_nether", BuiltinDimensionTypes.NETHER, netherGenerator, seed, BlockPos.ZERO, gameMode, worldMode);
+        createWorld(server, worldString + "_end", BuiltinDimensionTypes.END, endGenerator, seed, BlockPos.ZERO, gameMode, worldMode);
+        registerWorldMode(worldString, worldMode);
     }
 
     private static void createWorld(MinecraftServer server, String worldString, ResourceKey<DimensionType> dimensionType, ChunkGenerator generator, BlockPos spawnPos, GameType gameMode) {
-        createWorld(server, worldString, dimensionType, generator, server.overworld().getSeed(), spawnPos, gameMode);
+        createWorld(server, worldString, dimensionType, generator, server.overworld().getSeed(), spawnPos, gameMode, gameMode == GameType.CREATIVE ? WorldMode.CREATIVE : WorldMode.NORMAL);
     }
 
     private static void createWorld(
@@ -624,7 +703,8 @@ public class MultiWorld implements ModInitializer {
             ChunkGenerator generator,
             long seed,
             BlockPos spawnPos,
-            GameType gameMode
+                GameType gameMode,
+                WorldMode worldMode
     ) {
         ResourceKey<Level> worldKey = ResourceKey.create(
                 Registries.DIMENSION,
@@ -714,6 +794,7 @@ public class MultiWorld implements ModInitializer {
                 seed,
                 spawnPos,
                 gameMode,
+                worldMode,
                 newLevelProperties.getGameRules()
         );
 
@@ -751,6 +832,7 @@ public class MultiWorld implements ModInitializer {
 
     public static void deleteWorld(MinecraftServer server, String worldName) {
         LOGGER.info("Deleting world: {}", worldName);
+        registerWorldMode(worldName, WorldMode.NORMAL);
 
         ResourceKey<Level> overWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
         ResourceKey<Level> netherWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_nether"));

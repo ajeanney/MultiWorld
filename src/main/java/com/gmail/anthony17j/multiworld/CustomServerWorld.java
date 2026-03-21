@@ -17,7 +17,6 @@ import net.minecraft.world.level.levelgen.PhantomSpawner;
 
 import java.util.Objects;
 
-import static com.gmail.anthony17j.multiworld.MultiWorld.CREATIVE_WORLD_NAME;
 import static com.gmail.anthony17j.multiworld.MultiWorld.NAMESPACE;
 import static net.minecraft.core.registries.Registries.DIMENSION;
 
@@ -131,10 +130,6 @@ public class CustomServerWorld extends ServerLevel {
     }
 
     public static boolean isCreativeWorld(ResourceKey<Level> key) {
-        if (Objects.equals(key.identifier().getNamespace(), NAMESPACE)) {
-            String path = getBaseWorldName(key.identifier().getPath());
-            return path.equals(CREATIVE_WORLD_NAME);
-        }
-        return false;
+        return MultiWorld.isCreativeModeWorld(key);
     }
 }

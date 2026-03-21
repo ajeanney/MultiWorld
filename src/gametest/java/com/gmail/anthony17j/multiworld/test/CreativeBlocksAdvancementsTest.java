@@ -13,23 +13,32 @@ import net.minecraft.world.level.storage.LevelResource;
 
 import java.io.File;
 
+import static com.gmail.anthony17j.multiworld.CustomServerWorld.isCreativeWorld;
 import static com.gmail.anthony17j.multiworld.test.TestAssertions.*;
 
 public class CreativeBlocksAdvancementsTest {
+
+    private static final String CREATIVE_ADVANCEMENT_WORLD = "a_creative_advancements";
 
     @GameTest(maxTicks = 400)
     public void advancementsAreBlockedInCreativeWorld(GameTestHelper helper) {
         ServerPlayer player = createMockServerPlayer(helper);
         MinecraftServer server = helper.getLevel().getServer();
+        String creativeWorld = CREATIVE_ADVANCEMENT_WORLD + "_" + Long.toUnsignedString(System.nanoTime(), 36);
 
         String worldFolder = server.getWorldPath(LevelResource.ROOT).toString();
         new File(worldFolder + "/advancements").mkdirs();
+
+        createWorld(helper, player, creativeWorld, "flat", "creative");
 
         // Switch to creative world
         server.getCommands().performPrefixedCommand(player.createCommandSourceStack(), "creative");
 
         helper.runAfterDelay(10, () -> {
-            assertInDimension(helper, player, "multiworld", "creative");
+            if (!"multiworld".equals(player.level().dimension().identifier().getNamespace()) || !isCreativeWorld(player.level().dimension())) {
+                helper.fail("Expected /creative to place player in a creative-mode multiworld, but was " + player.level().dimension().identifier());
+                return;
+            }
 
             // Try to grant an advancement manually via award() - should be blocked by PlayerAdvancementsMixin
             AdvancementHolder mineStone = server.getAdvancements().get(Identifier.parse("minecraft:story/mine_stone"));

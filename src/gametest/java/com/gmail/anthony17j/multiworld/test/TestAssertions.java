@@ -109,7 +109,21 @@ public class TestAssertions {
         if (hasCustomWorld(player, worldName)) {
             return;
         }
-        runServerCommand(helper, player, "mw create " + worldName + " " + seed);
+        runServerCommand(helper, player, "mw create " + worldName + " normal normal " + seed);
+    }
+
+    public static void createWorld(GameTestHelper helper, ServerPlayer player, String worldName, String preset, String mode) {
+        if (hasCustomWorld(player, worldName)) {
+            return;
+        }
+        runServerCommand(helper, player, "mw create " + worldName + " " + preset + " " + mode);
+    }
+
+    public static void createWorld(GameTestHelper helper, ServerPlayer player, String worldName, String preset, String mode, long seed) {
+        if (hasCustomWorld(player, worldName)) {
+            return;
+        }
+        runServerCommand(helper, player, "mw create " + worldName + " " + preset + " " + mode + " " + seed);
     }
 
     public static ServerLevel getCustomWorld(ServerPlayer player, String worldName) {

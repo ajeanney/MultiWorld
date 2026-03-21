@@ -80,12 +80,9 @@ public abstract class TeleportTransitionMixin {
     )
     private static Vec3 redirectFindAdjustedSharedSpawnPos(ServerLevel world, Entity entity) {
         Level entityWorld = entity.level();
-        if (Objects.equals(entityWorld.dimension().identifier().getNamespace(), NAMESPACE)) {
-            String worldName = getBaseWorldName(entityWorld.dimension().identifier().getPath());
-            if (worldName.equals(MultiWorld.CREATIVE_WORLD_NAME)) {
-                // Keep creative world respawn fixed at configured spawn.
-                return Vec3.atBottomCenterOf(world.getRespawnData().pos());
-            }
+        if (isCreativeWorld(entityWorld.dimension())) {
+            // Keep creative-mode world respawn fixed at configured spawn.
+            return Vec3.atBottomCenterOf(world.getRespawnData().pos());
         }
         // Preserve vanilla adjusted spawn behavior (spawn zone, safe location search).
         return TeleportTransitionAccessor.invokeFindAdjustedSharedSpawnPos(world, entity);
