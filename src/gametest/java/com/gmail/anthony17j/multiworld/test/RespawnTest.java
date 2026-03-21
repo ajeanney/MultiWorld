@@ -30,7 +30,7 @@ public class RespawnTest {
     private static final double BED_TOLERANCE = 5.0;
     private static final double SPAWN_ZONE_TOLERANCE = 40.0;
     private static final String RESPawn_WORLD = SHARED_TEST_WORLD;
-    private static final String CREATIVE_WORLD = "creative";
+    private static final String CREATIVE_WORLD_PREFIX = "creative_respawn_world";
     private static final long FIXED_SEED_SPAWN_TEST_SEED = -2831322041033427943L;
     private static final String FIXED_SEED_SPAWN_WORLD = "seed_spawn_world";
 
@@ -192,10 +192,13 @@ public class RespawnTest {
         ServerPlayer player = createMockServerPlayer(helper);
         MinecraftServer server = helper.getLevel().getServer();
         ensureAdvancementsDir(server);
+        String creativeWorld = CREATIVE_WORLD_PREFIX + "_" + Long.toUnsignedString(System.nanoTime(), 36);
 
-        teleportToWorld(helper, player, CREATIVE_WORLD);
+        createWorld(helper, player, creativeWorld, "flat", "creative");
+
+        teleportToWorld(helper, player, creativeWorld);
         helper.runAfterDelay(10, () -> {
-            assertInDimension(helper, player, NAMESPACE, CREATIVE_WORLD);
+            assertInDimension(helper, player, NAMESPACE, creativeWorld);
             ServerLevel creative = (ServerLevel) player.level();
 
             BlockPos creativeSpawn = creative.getRespawnData().pos();
@@ -209,7 +212,7 @@ public class RespawnTest {
             }
 
             ServerPlayer respawned = killAndRespawn(player, server);
-            assertInDimension(helper, respawned, NAMESPACE, CREATIVE_WORLD);
+            assertInDimension(helper, respawned, NAMESPACE, creativeWorld);
             assertRespawnNearWorldSpawn(helper, respawned, creative, "creative world spawn after death");
 
             helper.succeed();

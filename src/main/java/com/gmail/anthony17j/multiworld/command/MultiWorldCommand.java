@@ -5,6 +5,8 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.LongArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import net.minecraft.commands.CommandBuildContext;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -19,6 +21,7 @@ import net.minecraft.world.level.Level;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 import static com.gmail.anthony17j.multiworld.CustomServerWorld.getBaseWorldName;
@@ -62,14 +65,44 @@ public final class MultiWorldCommand {
                 .executes(ctx -> {
                     String worldName = StringArgumentType.getString(ctx, "worldName");
                     long seed = new Random().nextLong();
-                    return createCommand(ctx.getSource(), worldName, seed);
+                    return createCommand(ctx.getSource(), worldName, "normal", "normal", seed);
                 })
-                .then(Commands.argument("seed", LongArgumentType.longArg())
+                .then(Commands.argument("preset", StringArgumentType.word())
+                    .suggests((ctx, builder) -> suggestPresets(builder))
                     .executes(ctx -> {
                         String worldName = StringArgumentType.getString(ctx, "worldName");
-                        long seed = LongArgumentType.getLong(ctx, "seed");
-                        return createCommand(ctx.getSource(), worldName, seed);
+                        String preset = StringArgumentType.getString(ctx, "preset");
+                        long seed = new Random().nextLong();
+                        return createCommand(ctx.getSource(), worldName, preset, "normal", seed);
                     })
+                    .then(Commands.argument("mode", StringArgumentType.word())
+                        .suggests((ctx, builder) -> suggestModes(builder))
+                        .executes(ctx -> {
+                            String worldName = StringArgumentType.getString(ctx, "worldName");
+                            String preset = StringArgumentType.getString(ctx, "preset");
+                            String mode = StringArgumentType.getString(ctx, "mode");
+                            long seed = new Random().nextLong();
+                            return createCommand(ctx.getSource(), worldName, preset, mode, seed);
+                        })
+                        .then(Commands.argument("seed", LongArgumentType.longArg())
+                            .executes(ctx -> {
+                                String worldName = StringArgumentType.getString(ctx, "worldName");
+                                String preset = StringArgumentType.getString(ctx, "preset");
+                                String mode = StringArgumentType.getString(ctx, "mode");
+                                long seed = LongArgumentType.getLong(ctx, "seed");
+                                return createCommand(ctx.getSource(), worldName, preset, mode, seed);
+                            })
+                        )
+                        .then(Commands.argument("seedText", StringArgumentType.word())
+                            .executes(ctx -> {
+                                String worldName = StringArgumentType.getString(ctx, "worldName");
+                                String preset = StringArgumentType.getString(ctx, "preset");
+                                String mode = StringArgumentType.getString(ctx, "mode");
+                                long seed = parseSeed(StringArgumentType.getString(ctx, "seedText"));
+                                return createCommand(ctx.getSource(), worldName, preset, mode, seed);
+                            })
+                        )
+                    )
                 )
             )
         );
@@ -99,7 +132,7 @@ public final class MultiWorldCommand {
 
         if (isAdmin) {
             source.sendSystemMessage(Component.literal("§7/mw import <folder> <name> §8- §7Import world from folder"));
-            source.sendSystemMessage(Component.literal("§7/mw create <name> [seed] §8- §7Create a new world"));
+            source.sendSystemMessage(Component.literal("§7/mw create <name> [preset] [mode] [seed] §8- §7Create a new world"));
             source.sendSystemMessage(Component.literal("§7/mw delete <name> §8- §7Delete a world"));
         }
     }
@@ -119,9 +152,24 @@ public final class MultiWorldCommand {
                 .map(ResourceKey::identifier)
                 .filter(id -> id.getNamespace().equals(NAMESPACE))
                 .filter(id -> !id.getPath().endsWith("_nether") && !id.getPath().endsWith("_end"))
-                .filter(id -> !id.getPath().equals(CREATIVE_WORLD_NAME))
                 .map(Identifier::getPath)
                 .collect(Collectors.toList());
+    }
+
+    private static CompletableFuture<Suggestions> suggestPresets(SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(new String[]{"normal", "flat"}, builder);
+    }
+
+    private static CompletableFuture<Suggestions> suggestModes(SuggestionsBuilder builder) {
+        return SharedSuggestionProvider.suggest(new String[]{"normal", "creative"}, builder);
+    }
+
+    private static long parseSeed(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (NumberFormatException ignored) {
+            return (long) value.hashCode();
+        }
     }
 
     private static int teleportCommand(CommandSourceStack source, String worldString) {
@@ -175,17 +223,31 @@ public final class MultiWorldCommand {
         }
     }
 
-    private static int createCommand(CommandSourceStack source, String worldName, long seed) {
+    private static int createCommand(CommandSourceStack source, String worldName, String preset, String mode, long seed) {
         ResourceKey<Level> worldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
         if (source.getServer().getLevel(worldKey) != null) {
             source.sendFailure(Component.literal("§cA world with this name already exists!"));
             return 0;
         }
 
-        source.sendSystemMessage(Component.literal("Creating new world '" + worldName + "' with seed: " + seed));
+        String normalizedPreset = preset.toLowerCase();
+        if (!normalizedPreset.equals("normal") && !normalizedPreset.equals("flat")) {
+            source.sendFailure(Component.literal("§cInvalid preset. Allowed values: normal, flat"));
+            return 0;
+        }
+
+        String normalizedMode = mode.toLowerCase();
+        if (!normalizedMode.equals("normal") && !normalizedMode.equals("creative")) {
+            source.sendFailure(Component.literal("§cInvalid mode. Allowed values: normal, creative"));
+            return 0;
+        }
+
+        MultiWorld.WorldMode worldMode = MultiWorld.WorldMode.fromString(normalizedMode);
+
+        source.sendSystemMessage(Component.literal("Creating new world '" + worldName + "' with seed: " + seed + " (preset=" + normalizedPreset + ", mode=" + normalizedMode + ")"));
 
         try {
-            createWorldWithDimensions(source.getServer(), worldName, seed);
+            createWorldWithDimensions(source.getServer(), worldName, seed, null, normalizedPreset, worldMode);
             source.sendSuccess(() -> Component.literal("§aWorld created successfully! Use §6/mw tp " + worldName + "§a to teleport to it."), false);
             return 1;
         } catch (Exception e) {
