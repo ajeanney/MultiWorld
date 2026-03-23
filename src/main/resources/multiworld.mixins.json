@@ -1,8 +1,7 @@
 {
   "required": true,
-  "minVersion": "0.8",
-  "package": "com.gmail.anthony17j.multiworld.mixin",
-  "compatibilityLevel": "JAVA_21",
+  "package": "fr.jeanney.mixin",
+  "compatibilityLevel": "JAVA_25",
   "mixins": [
     "BaseFireBlockMixin",
     "PlayerAdvancementsMixin",
@@ -12,7 +11,6 @@
     "EndPortalBlockMixin",
     "EntityMixin",
     "FallingBlockEntityMixin",
-    "LegacyStructureDataHandlerMixin",
     "IMinecraftServerMixin",
     "MapItemSavedDataMixin",
     "NetherPortalBlockMixin",

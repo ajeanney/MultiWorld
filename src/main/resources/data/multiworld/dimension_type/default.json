@@ -14,6 +14,7 @@
   "logical_height": 256,
   "min_y": 0,
   "height": 256,
+  "has_ender_dragon_fight": false,
   "monster_spawn_block_light_limit": 15,
   "monster_spawn_light_level": 15
 }
