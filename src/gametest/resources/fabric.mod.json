@@ -6,20 +6,20 @@
   "environment": "*",
   "entrypoints": {
     "fabric-gametest": [
-      "com.gmail.anthony17j.multiworld.test.InventorySwitchTest",
-      "com.gmail.anthony17j.multiworld.test.RoundTripTest",
-      "com.gmail.anthony17j.multiworld.test.AdvancementsAndStatsTest",
-      "com.gmail.anthony17j.multiworld.test.CreativeBlocksAdvancementsTest",
-      "com.gmail.anthony17j.multiworld.test.PlayerStateSeparationTest",
-      "com.gmail.anthony17j.multiworld.test.MountedEntityTest",
-      "com.gmail.anthony17j.multiworld.test.EnderPearlSeparationTest",
-      "com.gmail.anthony17j.multiworld.test.PortalDimensionTest",
-      "com.gmail.anthony17j.multiworld.test.EntityPortalTest",
-      "com.gmail.anthony17j.multiworld.test.RespawnTest",
-      "com.gmail.anthony17j.multiworld.test.EnderDragonEndTest",
-      "com.gmail.anthony17j.multiworld.test.WorldCreationTest",
-      "com.gmail.anthony17j.multiworld.test.WorldManagementCommandTest",
-      "com.gmail.anthony17j.multiworld.test.WorldPropertiesIsolationTest"
+      "fr.jeanney.InventorySwitchTest",
+      "fr.jeanney.RoundTripTest",
+      "fr.jeanney.AdvancementsAndStatsTest",
+      "fr.jeanney.CreativeBlocksAdvancementsTest",
+      "fr.jeanney.PlayerStateSeparationTest",
+      "fr.jeanney.MountedEntityTest",
+      "fr.jeanney.EnderPearlSeparationTest",
+      "fr.jeanney.PortalDimensionTest",
+      "fr.jeanney.EntityPortalTest",
+      "fr.jeanney.RespawnTest",
+      "fr.jeanney.EnderDragonEndTest",
+      "fr.jeanney.WorldCreationTest",
+      "fr.jeanney.WorldManagementCommandTest",
+      "fr.jeanney.WorldPropertiesIsolationTest"
     ]
   },
   "depends": {
