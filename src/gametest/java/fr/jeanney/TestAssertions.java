@@ -29,8 +29,7 @@ public class TestAssertions {
         ServerLevel level = helper.getLevel();
         MinecraftServer server = level.getServer();
         CommonListenerCookie cookie = CommonListenerCookie.createInitial(
-                new GameProfile(UUID.randomUUID(), "test-mock-player"), false
-        );
+                new GameProfile(UUID.randomUUID(), "test-mock-player"), false);
         ServerPlayer player = new ServerPlayer(server, level, cookie.gameProfile(), cookie.clientInformation()) {
             @Override
             public @NonNull GameType gameMode() {
@@ -43,12 +42,14 @@ public class TestAssertions {
         return player;
     }
 
-    public static void assertInDimension(GameTestHelper helper, ServerPlayer player, String expectedNamespace, String expectedPath) {
+    public static void assertInDimension(GameTestHelper helper, ServerPlayer player, String expectedNamespace,
+            String expectedPath) {
         ResourceKey<Level> dim = player.level().dimension();
         String ns = dim.identifier().getNamespace();
         String path = dim.identifier().getPath();
         if (!expectedNamespace.equals(ns) || !expectedPath.equals(path)) {
-            helper.fail("Expected dimension " + expectedNamespace + ":" + expectedPath + ", but player is in " + ns + ":" + path);
+            helper.fail("Expected dimension " + expectedNamespace + ":" + expectedPath + ", but player is in " + ns
+                    + ":" + path);
         }
     }
 
@@ -64,14 +65,16 @@ public class TestAssertions {
         }
     }
 
-    public static void assertNearPosition(GameTestHelper helper, ServerPlayer player, double expectedX, double expectedY, double expectedZ, double tolerance, String context) {
+    public static void assertNearPosition(GameTestHelper helper, ServerPlayer player, double expectedX,
+            double expectedY, double expectedZ, double tolerance, String context) {
         double dx = player.getX() - expectedX;
         double dy = player.getY() - expectedY;
         double dz = player.getZ() - expectedZ;
         double distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (distance > tolerance) {
             helper.fail("Expected player near (" + expectedX + ", " + expectedY + ", " + expectedZ + ") " + context
-                    + ", but was at (" + player.getX() + ", " + player.getY() + ", " + player.getZ() + ") (distance=" + distance + ")");
+                    + ", but was at (" + player.getX() + ", " + player.getY() + ", " + player.getZ() + ") (distance="
+                    + distance + ")");
         }
     }
 
@@ -112,14 +115,16 @@ public class TestAssertions {
         runServerCommand(helper, player, "mw create " + worldName + " normal normal " + seed);
     }
 
-    public static void createWorld(GameTestHelper helper, ServerPlayer player, String worldName, String preset, String mode) {
+    public static void createWorld(GameTestHelper helper, ServerPlayer player, String worldName, String preset,
+            String mode) {
         if (hasCustomWorld(player, worldName)) {
             return;
         }
         runServerCommand(helper, player, "mw create " + worldName + " " + preset + " " + mode);
     }
 
-    public static void createWorld(GameTestHelper helper, ServerPlayer player, String worldName, String preset, String mode, long seed) {
+    public static void createWorld(GameTestHelper helper, ServerPlayer player, String worldName, String preset,
+            String mode, long seed) {
         if (hasCustomWorld(player, worldName)) {
             return;
         }
@@ -133,8 +138,7 @@ public class TestAssertions {
         }
         ResourceKey<Level> worldKey = ResourceKey.create(
                 Registries.DIMENSION,
-                Identifier.fromNamespaceAndPath("multiworld", worldName)
-        );
+                Identifier.fromNamespaceAndPath("multiworld", worldName));
         return server.getLevel(worldKey);
     }
 

@@ -13,13 +13,7 @@ import static fr.jeanney.CustomServerWorld.isCustomEndWorld;
 @Mixin(TheEndGatewayBlockEntity.class)
 public abstract class TheEndGatewayBlockEntityMixin {
 
-    @Redirect(
-            method = "getPortalPosition",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/level/ServerLevel;dimension()Lnet/minecraft/resources/ResourceKey;"
-            )
-    )
+    @Redirect(method = "getPortalPosition", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;dimension()Lnet/minecraft/resources/ResourceKey;"))
     private ResourceKey<Level> redirectGetRegistryKey(ServerLevel world) {
         ResourceKey<Level> originalKey = world.dimension();
 

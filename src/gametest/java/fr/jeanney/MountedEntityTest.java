@@ -26,12 +26,14 @@ public class MountedEntityTest {
 
         // Spawn a boat at the player's position and make the player ride it
         Boat boat = (Boat) EntityType.OAK_BOAT.create(level, EntitySpawnReason.COMMAND);
-        if (boat == null) helper.fail("Failed to create boat");
+        if (boat == null)
+            helper.fail("Failed to create boat");
         boat.setPos(player.getX(), player.getY(), player.getZ());
         level.addFreshEntity(boat);
         player.startRiding(boat);
 
-        if (player.getVehicle() == null) helper.fail("Player should be riding the boat");
+        if (player.getVehicle() == null)
+            helper.fail("Player should be riding the boat");
 
         // Step 1: /mw tp -> overworld to custom world (boat should be discarded)
         teleportToWorld(helper, player, WORLD_NAME);

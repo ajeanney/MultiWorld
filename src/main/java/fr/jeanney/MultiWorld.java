@@ -2,8 +2,6 @@ package fr.jeanney;
 
 import fr.jeanney.command.CreativeCommand;
 import fr.jeanney.command.MultiWorldCommand;
-import fr.jeanney.mixin.IMinecraftServerMixin;
-import fr.jeanney.mixin.ServerLevelAccessor;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -12,67 +10,43 @@ import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.GlobalPos;
 import net.minecraft.core.Holder;
-import net.minecraft.core.MappedRegistry;
-import net.minecraft.core.RegistrationInfo;
-import net.minecraft.core.RegistryAccess;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtAccounter;
 import net.minecraft.nbt.NbtIo;
-import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.NbtUtils;
-import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundGameEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSetTimePacket;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.ServerScoreboard;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.ProgressListener;
 import net.minecraft.util.datafix.DataFixTypes;
-import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.biome.Biome;
-import net.minecraft.world.level.biome.Biomes;
-import net.minecraft.world.level.biome.MultiNoiseBiomeSource;
-import net.minecraft.world.level.biome.MultiNoiseBiomeSourceParameterLists;
-import net.minecraft.world.level.biome.TheEndBiomeSource;
-import net.minecraft.world.level.chunk.ChunkGenerator;
-import net.minecraft.world.level.dimension.BuiltinDimensionTypes;
+import net.minecraft.world.clock.ClockNetworkState;
+import net.minecraft.world.clock.ServerClockManager;
+import net.minecraft.world.clock.WorldClock;
 import net.minecraft.world.level.dimension.DimensionType;
-import net.minecraft.world.level.dimension.LevelStem;
-import net.minecraft.world.level.levelgen.NoiseBasedChunkGenerator;
-import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
-import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.level.levelgen.flat.FlatLayerInfo;
-import net.minecraft.world.level.levelgen.flat.FlatLevelGeneratorSettings;
-import net.minecraft.world.level.levelgen.FlatLevelSource;
 import net.minecraft.world.level.saveddata.WeatherData;
-import net.minecraft.world.level.storage.LevelData;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.gamerules.GameRules;
+import net.minecraft.world.scores.Objective;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
-import java.util.stream.StreamSupport;
 
 import static fr.jeanney.CustomServerWorld.getBaseWorldName;
 
@@ -81,15 +55,8 @@ public class MultiWorld implements ModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger(MultiWorld.class);
 
     public static final String NAMESPACE = "multiworld";
-    public static final ResourceKey<DimensionType> DEFAULT_DIM_TYPE = ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.fromNamespaceAndPath(NAMESPACE, "default"));
-
-    private static final String CONFIG_FILE_NAME = "multiworld.dat";
-    private static final int GAME_RULE_AUTOSAVE_INTERVAL_TICKS = 100;
-    private static int gameRuleAutosaveCooldown = GAME_RULE_AUTOSAVE_INTERVAL_TICKS;
-    private static final Map<ResourceKey<Level>, String> LAST_SAVED_GAMERULE_SNAPSHOTS = new HashMap<>();
-    private static final Map<ResourceKey<Level>, GameRules> CUSTOM_WORLD_GAMERULES = new HashMap<>();
-    private static final Map<ResourceKey<Level>, WeatherData> CUSTOM_WORLD_WEATHER = new HashMap<>();
-    private static final Set<String> CREATIVE_MODE_BASE_WORLDS = new HashSet<>();
+    public static final ResourceKey<DimensionType> DEFAULT_DIM_TYPE = ResourceKey.create(Registries.DIMENSION_TYPE,
+            Identifier.fromNamespaceAndPath(NAMESPACE, "default"));
 
     public enum WorldMode {
         NORMAL,
@@ -113,359 +80,129 @@ public class MultiWorld implements ModInitializer {
         CommandRegistrationCallback.EVENT.register(MultiWorldCommand::register);
 
         ServerLifecycleEvents.SERVER_STARTED.register((MinecraftServer server) -> {
-            CREATIVE_MODE_BASE_WORLDS.clear();
-            loadCustomWorlds(server);
+            WorldStateService.resetOnServerStarted();
+            WorldConfigService.loadCustomWorlds(server, WorldLifecycleService::unload,
+                    WorldLifecycleService::createWorld);
         });
 
-        ServerTickEvents.END_SERVER_TICK.register(MultiWorld::autosaveCustomWorldGameRules);
-        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
-            persistCustomWorldGameRules(server, true);
-            LAST_SAVED_GAMERULE_SNAPSHOTS.clear();
-            CUSTOM_WORLD_GAMERULES.clear();
-            CUSTOM_WORLD_WEATHER.clear();
-            CREATIVE_MODE_BASE_WORLDS.clear();
-            gameRuleAutosaveCooldown = GAME_RULE_AUTOSAVE_INTERVAL_TICKS;
+        ServerTickEvents.END_SERVER_TICK.register(server -> {
+            WorldStateService.tickCustomWorldClocks(server);
+            WorldConfigService.autosaveCustomWorldGameRules(server);
+            WorldStateService.autosaveCustomWorldScoreboards(server);
         });
+        ServerLifecycleEvents.SERVER_STOPPING.register(server -> {
+            WorldConfigService.persistCustomWorldGameRules(server, true);
+            WorldStateService.autosaveCustomWorldScoreboards(server);
+            WorldStateService.resetOnServerStopping();
+        });
+    }
+
+    public static ServerClockManager getClockManagerForLevel(ServerLevel level) {
+        return WorldStateService.getClockManagerForLevel(level);
+    }
+
+    public static ServerClockManager getClockManagerForSource(CommandSourceStack source,
+            MinecraftServer fallbackServer) {
+        if (source != null && source.getLevel() != null) {
+            ServerLevel level = source.getLevel();
+            if (NAMESPACE.equals(level.dimension().identifier().getNamespace())) {
+                return getClockManagerForLevel(level);
+            }
+        }
+        return fallbackServer.clockManager();
+    }
+
+    public static ClientboundSetTimePacket createTimeSyncPacketForLevel(ServerLevel level) {
+        ServerClockManager clockManager = NAMESPACE.equals(level.dimension().identifier().getNamespace())
+                ? getClockManagerForLevel(level)
+                : level.getServer().clockManager();
+        Map<Holder<WorldClock>, ClockNetworkState> updates = new HashMap<>();
+        var clockRegistry = level.registryAccess().lookupOrThrow(Registries.WORLD_CLOCK);
+        clockRegistry.listElements().forEach(
+                clock -> updates.put(clock, new ClockNetworkState(clockManager.getTotalTicks(clock), 0.0F, 1.0F)));
+        return new ClientboundSetTimePacket(level.getGameTime(), updates);
+    }
+
+    public static boolean isWeatherGameEvent(ClientboundGameEventPacket.Type eventType) {
+        return eventType == ClientboundGameEventPacket.START_RAINING
+                || eventType == ClientboundGameEventPacket.STOP_RAINING
+                || eventType == ClientboundGameEventPacket.RAIN_LEVEL_CHANGE
+                || eventType == ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE;
+    }
+
+    public static ClientboundGameEventPacket createWeatherSyncPacketForLevel(ServerLevel level,
+            ClientboundGameEventPacket.Type eventType) {
+        if (eventType == ClientboundGameEventPacket.START_RAINING
+                || eventType == ClientboundGameEventPacket.STOP_RAINING) {
+            boolean raining = level.getWeatherData().isRaining();
+            return new ClientboundGameEventPacket(
+                    raining ? ClientboundGameEventPacket.START_RAINING : ClientboundGameEventPacket.STOP_RAINING,
+                    0.0F);
+        }
+
+        if (eventType == ClientboundGameEventPacket.RAIN_LEVEL_CHANGE) {
+            return new ClientboundGameEventPacket(eventType, level.getRainLevel(1.0F));
+        }
+
+        if (eventType == ClientboundGameEventPacket.THUNDER_LEVEL_CHANGE) {
+            return new ClientboundGameEventPacket(eventType, level.getThunderLevel(1.0F));
+        }
+
+        return new ClientboundGameEventPacket(eventType, 0.0F);
+    }
+
+    public static ServerScoreboard getScoreboardForSource(CommandSourceStack source, MinecraftServer fallbackServer) {
+        if (source != null && source.getLevel() != null) {
+            ServerLevel level = source.getLevel();
+            if (NAMESPACE.equals(level.dimension().identifier().getNamespace())) {
+                return getScoreboardForLevel(level);
+            }
+        }
+        return fallbackServer.getScoreboard();
+    }
+
+    public static ServerScoreboard getScoreboardForLevel(ServerLevel level) {
+        return WorldStateService.getScoreboardForLevel(level);
     }
 
     public static GameRules getCustomWorldGameRules(ServerLevel level) {
-        if (!NAMESPACE.equals(level.dimension().identifier().getNamespace())) {
-            return null;
-        }
-
-        ResourceKey<Level> key = level.dimension();
-        return CUSTOM_WORLD_GAMERULES.computeIfAbsent(key,
-                unused -> level.getServer().getGameRules().copy(level.getServer().getWorldData().enabledFeatures()));
+        return WorldStateService.getCustomWorldGameRules(level);
     }
 
     public static WeatherData getCustomWorldWeatherData(ServerLevel level) {
-        if (!NAMESPACE.equals(level.dimension().identifier().getNamespace())) {
-            return null;
-        }
-
-        ResourceKey<Level> key = level.dimension();
-        return CUSTOM_WORLD_WEATHER.computeIfAbsent(key, unused -> {
-            WeatherData base = level.getServer().getWeatherData();
-            return new WeatherData(
-                    base.getClearWeatherTime(),
-                    base.getRainTime(),
-                    base.getThunderTime(),
-                    base.isRaining(),
-                    base.isThundering()
-            );
-        });
+        return WorldStateService.getCustomWorldWeatherData(level);
     }
 
-    private static void clearCustomWorldState(ResourceKey<Level> key) {
-        CUSTOM_WORLD_GAMERULES.remove(key);
-        CUSTOM_WORLD_WEATHER.remove(key);
-        LAST_SAVED_GAMERULE_SNAPSHOTS.remove(key);
+    private static WorldStateService.WorldInitialState createFreshInitialState(WorldMode worldMode) {
+        return WorldStateService.createFreshInitialState(worldMode);
     }
 
-    private static void initializeCustomWorldState(ServerLevel level) {
-        if (!NAMESPACE.equals(level.dimension().identifier().getNamespace())) {
-            return;
-        }
-
-        ResourceKey<Level> key = level.dimension();
-        CUSTOM_WORLD_GAMERULES.put(
-                key,
-                level.getServer().getGameRules().copy(level.getServer().getWorldData().enabledFeatures())
-        );
-
-        WeatherData base = level.getServer().getWeatherData();
-        CUSTOM_WORLD_WEATHER.put(
-                key,
-                new WeatherData(
-                        base.getClearWeatherTime(),
-                        base.getRainTime(),
-                        base.getThunderTime(),
-                        base.isRaining(),
-                        base.isThundering()
-                )
-        );
+    private static WorldStateService.WorldInitialState createImportedInitialState(CompoundTag dataTag,
+            Optional<WeatherData> savedWeather,
+            boolean preserveSavedWorldClocks, OptionalLong overworldClockTicks) {
+        return WorldStateService.createImportedInitialState(dataTag, savedWeather, preserveSavedWorldClocks,
+                overworldClockTicks);
     }
 
     public static boolean isCreativeModeWorld(ResourceKey<Level> key) {
-        if (!NAMESPACE.equals(key.identifier().getNamespace())) {
-            return false;
-        }
-        return CREATIVE_MODE_BASE_WORLDS.contains(getBaseWorldName(key.identifier().getPath()));
+        return WorldStateService.isCreativeModeWorld(key);
     }
 
     public static Optional<String> getCreativeWorldName(MinecraftServer server) {
-        return StreamSupport.stream(server.getAllLevels().spliterator(), false)
-                .filter(level -> NAMESPACE.equals(level.dimension().identifier().getNamespace()))
-                .map(level -> getBaseWorldName(level.dimension().identifier().getPath()))
-                .distinct()
-                .filter(CREATIVE_MODE_BASE_WORLDS::contains)
-                .sorted(Comparator.naturalOrder())
-                .findFirst();
+        return WorldStateService.getCreativeWorldName(server);
     }
 
-    private static void registerWorldMode(String worldName, WorldMode mode) {
-        String baseWorldName = getBaseWorldName(worldName);
-        if (mode == WorldMode.CREATIVE) {
-            CREATIVE_MODE_BASE_WORLDS.add(baseWorldName);
-        } else {
-            CREATIVE_MODE_BASE_WORLDS.remove(baseWorldName);
-        }
+    private static void rememberPendingInitialState(String worldName,
+            WorldStateService.WorldInitialState initialState) {
+        WorldStateService.rememberPendingInitialState(worldName, initialState);
     }
 
-    private static void loadCustomWorlds(MinecraftServer server) {
-        String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
-        File dimensionsFolder = new File(serverWorldFolder + "/dimensions/" + NAMESPACE);
-
-        if (!dimensionsFolder.exists() || !dimensionsFolder.isDirectory()) {
-            LOGGER.info("No custom dimensions found.");
-            return;
+    public static void applyPendingInitialStateIfNeeded(MinecraftServer server, String worldName) {
+        Optional<WorldStateService.WorldInitialState> initialState = WorldStateService
+                .consumePendingInitialState(worldName);
+        if (initialState.isPresent()) {
+            WorldStateService.applyInitialStateToWorldFamily(server, getBaseWorldName(worldName), initialState.get());
         }
-
-        File[] worldFolders = dimensionsFolder.listFiles(File::isDirectory);
-
-        if (worldFolders == null || worldFolders.length == 0) {
-            LOGGER.info("No custom worlds found in dimensions folder.");
-            return;
-        }
-
-        for (File worldFolder : worldFolders) {
-            String worldName = worldFolder.getName();
-
-            ResourceKey<Level> worldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
-            ServerLevel existingWorld = server.getLevel(worldKey);
-
-            if (existingWorld instanceof CustomServerWorld) {
-                LOGGER.info("World '{}' already loaded correctly as CustomServerWorld", worldName);
-                continue;
-            }
-
-            if (existingWorld != null) {
-                unload(server, existingWorld);
-            }
-
-            File dataFolder = new File(worldFolder, "data");
-            File configFile = new File(dataFolder, CONFIG_FILE_NAME);
-
-            if (!configFile.exists()) {
-                LOGGER.warn("Config file not found for world '{}', skipping", worldName);
-                continue;
-            }
-
-            try {
-                CompoundTag configNbt = NbtIo.readCompressed(configFile.toPath(), NbtAccounter.unlimitedHeap());
-
-                long seed = configNbt.getLong("seed").orElseThrow();
-                ResourceKey<DimensionType> dimensionType = getDimensionTypeFromString(configNbt.getString("dimensionType").orElseThrow());
-                String generatorType = configNbt.getString("generatorType").orElse("overworld");
-
-                ChunkGenerator generator = createGeneratorFromType(server, generatorType, configNbt);
-
-                BlockPos spawnPos = null;
-                if (configNbt.contains("spawnPos")) {
-                    int[] spawnPosArray = configNbt.getIntArray("spawnPos").orElse(new int[]{0, 64, 0});
-                    spawnPos = new BlockPos(spawnPosArray[0], spawnPosArray[1], spawnPosArray[2]);
-                }
-
-                GameType gameMode = null;
-                if (configNbt.contains("gameMode")) {
-                    int gameModeIndex = configNbt.getInt("gameMode").orElse(0);
-                    gameMode = GameType.byId(gameModeIndex);
-                }
-
-                WorldMode worldMode = configNbt.contains("worldMode")
-                    ? WorldMode.fromString(configNbt.getString("worldMode").orElse("normal"))
-                    : (gameMode == GameType.CREATIVE ? WorldMode.CREATIVE : WorldMode.NORMAL);
-
-                GameRules loadedGameRules = configNbt.contains("gameRules")
-                        ? decodeGameRules(server, configNbt.getCompound("gameRules").orElse(new CompoundTag()))
-                        : new GameRules(server.getWorldData().enabledFeatures());
-
-                createWorld(server, worldName, dimensionType, generator, seed, spawnPos, gameMode, worldMode);
-                registerWorldMode(worldName, worldMode);
-
-                ServerLevel loadedWorld = server.getLevel(worldKey);
-                if (loadedWorld != null) {
-                    loadedWorld.getGameRules().setAll(loadedGameRules, server);
-                    LAST_SAVED_GAMERULE_SNAPSHOTS.put(worldKey, encodeGameRules(server, loadedGameRules).toString());
-                }
-
-            } catch (Exception e) {
-                LOGGER.error("Failed to load world '{}'", worldName, e);
-            }
-        }
-    }
-
-    private static ResourceKey<DimensionType> getDimensionTypeFromString(String dimensionTypeString) {
-        if (dimensionTypeString == null || dimensionTypeString.isEmpty()) {
-            return BuiltinDimensionTypes.OVERWORLD;
-        }
-
-        String[] parts = dimensionTypeString.split(":");
-        if (parts.length != 2) {
-            return BuiltinDimensionTypes.OVERWORLD;
-        }
-
-        return ResourceKey.create(Registries.DIMENSION_TYPE, Identifier.fromNamespaceAndPath(parts[0], parts[1]));
-    }
-
-    private static void saveWorldConfig(
-            MinecraftServer server,
-            String worldString,
-            ResourceKey<DimensionType> dimensionType,
-            ChunkGenerator generator,
-            String generatorType,
-            long seed,
-            BlockPos spawnPos,
-            GameType gameMode,
-                WorldMode worldMode,
-            GameRules gameRules
-    ) {
-        String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
-        String dimensionPath = serverWorldFolder + "/dimensions/" + NAMESPACE + "/" + worldString + "/data";
-        File dimensionDataDir = new File(dimensionPath);
-
-        if (!dimensionDataDir.exists() && !dimensionDataDir.mkdirs()) {
-            LOGGER.error("Could not create data directory for world '{}'", worldString);
-            return;
-        }
-
-        File configFile = new File(dimensionDataDir, CONFIG_FILE_NAME);
-
-        try {
-            CompoundTag configNbt = new CompoundTag();
-            configNbt.putString("dimensionType", dimensionType.identifier().toString());
-            configNbt.putLong("seed", seed);
-            configNbt.putString("generatorType", generatorType);
-
-            if (generatorType.equals("flat") && generator instanceof FlatLevelSource flatGenerator) {
-                FlatLevelGeneratorSettings flatConfig = flatGenerator.settings();
-
-                CompoundTag flatConfigNbt = new CompoundTag();
-                List<FlatLayerInfo> layers = flatConfig.getLayersInfo();
-                CompoundTag[] layersNbt = new CompoundTag[layers.size()];
-
-                for (int i = 0; i < layers.size(); i++) {
-                    FlatLayerInfo layer = layers.get(i);
-                    CompoundTag layerNbt = new CompoundTag();
-                    layerNbt.putInt("height", layer.getHeight());
-                    layerNbt.putString("block", BuiltInRegistries.BLOCK.getKey(layer.getBlockState().getBlock()).toString());
-                    layersNbt[i] = layerNbt;
-                }
-
-                CompoundTag layersCompound = new CompoundTag();
-                for (int i = 0; i < layersNbt.length; i++) {
-                    layersCompound.put("layer" + i, layersNbt[i]);
-                }
-                layersCompound.putInt("count", layersNbt.length);
-                flatConfigNbt.put("layers", layersCompound);
-                flatConfigNbt.putString("biome", flatConfig.getBiome().unwrapKey().map(k -> k.identifier().toString()).orElseThrow());
-                configNbt.put("flatConfig", flatConfigNbt);
-            }
-
-            if (spawnPos != null) {
-                configNbt.putIntArray("spawnPos", new int[]{spawnPos.getX(), spawnPos.getY(), spawnPos.getZ()});
-            }
-
-            if (gameMode != null) {
-                configNbt.putInt("gameMode", gameMode.getId());
-            }
-
-            if (worldMode != null) {
-                configNbt.putString("worldMode", worldMode.toConfigValue());
-            }
-
-            if (gameRules != null) {
-                configNbt.put("gameRules", encodeGameRules(server, gameRules));
-            }
-
-            NbtIo.writeCompressed(configNbt, configFile.toPath());
-        } catch (IOException e) {
-            LOGGER.error("Failed to save world configuration for '{}': {}", worldString, e.getMessage());
-        }
-    }
-
-    private static ChunkGenerator createGeneratorFromType(MinecraftServer server, String generatorType, CompoundTag configNbt) {
-        var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
-
-        return switch (generatorType) {
-            case "nether" -> createVanillaNetherGenerator(server);
-            case "end" -> createVanillaEndGenerator(server);
-            case "flat" -> {
-                if (configNbt.contains("flatConfig")) {
-                    try {
-                        CompoundTag flatConfigNbt = configNbt.getCompound("flatConfig").orElseThrow();
-                        CompoundTag layersCompound = flatConfigNbt.getCompound("layers").orElseThrow();
-                        int layerCount = layersCompound.getInt("count").orElse(0);
-
-                        List<FlatLayerInfo> layers = new ArrayList<>();
-                        for (int i = 0; i < layerCount; i++) {
-                            CompoundTag layerNbt = layersCompound.getCompound("layer" + i).orElseThrow();
-                            int thickness = layerNbt.getInt("height").orElseThrow();
-                            String blockId = layerNbt.getString("block").orElseThrow();
-                            Identifier blockIdentifier = Identifier.tryParse(blockId);
-                            if (blockIdentifier == null) {
-                                throw new IllegalArgumentException("Invalid block identifier: " + blockId);
-                            }
-
-                            Block block = server.registryAccess().lookupOrThrow(Registries.BLOCK).getOrThrow(ResourceKey.create(Registries.BLOCK, blockIdentifier)).value();
-                            layers.add(new FlatLayerInfo(thickness, block));
-                        }
-
-                        String biomeId = flatConfigNbt.getString("biome").orElse("minecraft:plains");
-                        Identifier biomeIdentifier = Identifier.tryParse(biomeId);
-                        Holder<Biome> biome = biomeLookup.getOrThrow(ResourceKey.create(Registries.BIOME, biomeIdentifier));
-
-                        yield new FlatLevelSource(
-                                new FlatLevelGeneratorSettings(Optional.empty(), biome, List.of())
-                                        .withBiomeAndLayers(layers, Optional.empty(), biome)
-                        );
-                    } catch (Exception e) {
-                        LOGGER.error("Error reconstructing flat generator", e);
-                    }
-                }
-                Holder<Biome> plainsBiome = biomeLookup.getOrThrow(Biomes.PLAINS);
-                yield new FlatLevelSource(
-                        new FlatLevelGeneratorSettings(Optional.empty(), plainsBiome, List.of())
-                                .withBiomeAndLayers(
-                                        List.of(
-                                                new FlatLayerInfo(1, Blocks.BEDROCK),
-                                                new FlatLayerInfo(61, Blocks.DIRT),
-                                                new FlatLayerInfo(1, Blocks.GRASS_BLOCK)
-                                        ),
-                                        Optional.empty(),
-                                        plainsBiome
-                                )
-                );
-            }
-            default -> createVanillaOverworldGenerator(server);
-        };
-    }
-
-    private static ChunkGenerator createVanillaOverworldGenerator(MinecraftServer server) {
-        var multiNoiseLookup = server.registryAccess().lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
-        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
-        return new NoiseBasedChunkGenerator(
-                MultiNoiseBiomeSource.createFromPreset(multiNoiseLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.OVERWORLD)),
-                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.OVERWORLD)
-        );
-    }
-
-    private static ChunkGenerator createVanillaNetherGenerator(MinecraftServer server) {
-        var multiNoiseLookup = server.registryAccess().lookupOrThrow(Registries.MULTI_NOISE_BIOME_SOURCE_PARAMETER_LIST);
-        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
-        return new NoiseBasedChunkGenerator(
-                MultiNoiseBiomeSource.createFromPreset(multiNoiseLookup.getOrThrow(MultiNoiseBiomeSourceParameterLists.NETHER)),
-                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.NETHER)
-        );
-    }
-
-    private static ChunkGenerator createVanillaEndGenerator(MinecraftServer server) {
-        var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
-        var noiseSettingsLookup = server.registryAccess().lookupOrThrow(Registries.NOISE_SETTINGS);
-        return new NoiseBasedChunkGenerator(
-                TheEndBiomeSource.create(biomeLookup),
-                noiseSettingsLookup.getOrThrow(NoiseGeneratorSettings.END)
-        );
     }
 
     public static boolean importWorld(MinecraftServer server, String worldFolderPath, String worldName) {
@@ -478,49 +215,74 @@ public class MultiWorld implements ModInitializer {
         }
 
         try {
-            sourceWorldFolder = resolveImportSourceWorldFolder(sourceWorldFolder);
+            sourceWorldFolder = WorldImportSupport.resolveImportSourceWorldFolder(sourceWorldFolder);
             File levelDatFile = new File(sourceWorldFolder, "level.dat");
             if (!levelDatFile.exists()) {
                 LOGGER.error("level.dat not found in {}", sourceWorldFolder.getAbsolutePath());
                 return false;
             }
 
-                CompoundTag levelData = NbtIo.readCompressed(levelDatFile.toPath(), NbtAccounter.unlimitedHeap());
-                levelData = DataFixTypes.LEVEL.updateToCurrentVersion(
+            CompoundTag rawLevelData = NbtIo.readCompressed(levelDatFile.toPath(), NbtAccounter.unlimitedHeap());
+            long seed = WorldImportSupport.extractSeedFromLevelDat(rawLevelData, server, sourceWorldFolder);
+            CompoundTag rawDataTag = rawLevelData.getCompound("Data").orElse(rawLevelData);
+            BlockPos importedSpawnPos = WorldImportSupport.extractImportedSpawnPos(rawDataTag).orElse(null);
+
+            CompoundTag levelData = rawLevelData.copy();
+            levelData = DataFixTypes.LEVEL.updateToCurrentVersion(
                     server.getFixerUpper(),
                     levelData,
-                    NbtUtils.getDataVersion(levelData, 0)
-                );
-                NbtUtils.addCurrentDataVersion(levelData);
-            CompoundTag dataTag = levelData.getCompound("Data").orElseThrow();
-            CompoundTag worldGenSettings = dataTag.getCompound("WorldGenSettings").orElseThrow();
-            long seed = worldGenSettings.getLong("seed").orElseThrow();
-                BlockPos importedSpawnPos = new BlockPos(
-                    dataTag.getInt("SpawnX").orElse(0),
-                    dataTag.getInt("SpawnY").orElse(63),
-                    dataTag.getInt("SpawnZ").orElse(0)
-                );
+                    NbtUtils.getDataVersion(levelData, 0));
+            NbtUtils.addCurrentDataVersion(levelData);
+            CompoundTag dataTag = levelData.getCompound("Data").orElse(levelData);
             LOGGER.info("Seed from world: {}", seed);
 
-            String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
+            String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
+                    .toString();
 
-            ResourceKey<Level> overWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
-            ResourceKey<Level> netherWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_nether"));
-            ResourceKey<Level> endWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_end"));
+            ResourceKey<Level> overWorldKey = ResourceKey.create(Registries.DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
+            ResourceKey<Level> netherWorldKey = ResourceKey.create(Registries.DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_nether"));
+            ResourceKey<Level> endWorldKey = ResourceKey.create(Registries.DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_end"));
 
-            copyWorldFiles(sourceWorldFolder, serverWorldFolder, overWorldKey);
-
-            File netherFolder = new File(sourceWorldFolder, "DIM-1");
-            if (netherFolder.exists()) {
-                copyWorldFiles(netherFolder, serverWorldFolder, netherWorldKey);
+            if (server.getLevel(overWorldKey) != null) {
+                LOGGER.info("Import target world '{}' already exists; replacing it", worldName);
+                deleteWorld(server, worldName);
             }
 
-            File endFolder = new File(sourceWorldFolder, "DIM1");
-            if (endFolder.exists()) {
-                copyWorldFiles(endFolder, serverWorldFolder, endWorldKey);
+            File sourceOverworldFolder = WorldImportSupport.resolveOverworldImportFolder(sourceWorldFolder);
+            WorldImportSupport.copyWorldFiles(sourceOverworldFolder, serverWorldFolder, overWorldKey);
+
+            if (!sourceOverworldFolder.equals(sourceWorldFolder)) {
+                String overworldDestination = WorldImportSupport.buildWorldDirectoryPath(serverWorldFolder,
+                        overWorldKey);
+                // Modern saves keep shared saved-data (world_gen_settings, weather,
+                // scoreboard...) at root/data.
+                // Merge it into imported overworld data after copying the per-dimension folder.
+                WorldImportSupport.copyFilesBeforeWorldCreation(sourceWorldFolder, "data", overworldDestination);
             }
 
-            createWorldWithDimensions(server, worldName, seed, importedSpawnPos);
+            File sourceNetherFolder = WorldImportSupport.resolveNetherImportFolder(sourceWorldFolder);
+            if (sourceNetherFolder != null) {
+                WorldImportSupport.copyWorldFiles(sourceNetherFolder, serverWorldFolder, netherWorldKey);
+            }
+
+            File sourceEndFolder = WorldImportSupport.resolveEndImportFolder(sourceWorldFolder);
+            if (sourceEndFolder != null) {
+                WorldImportSupport.copyWorldFiles(sourceEndFolder, serverWorldFolder, endWorldKey);
+            }
+
+            Optional<WeatherData> importedWeather = WorldImportSupport.extractWeatherFromSavedData(server,
+                    sourceWorldFolder);
+            boolean preserveSavedWorldClocks = WorldImportSupport.hasWorldClocksDat(sourceWorldFolder);
+            OptionalLong overworldClockTicks = WorldImportSupport.extractOverworldClockTicksFromDat(sourceWorldFolder);
+            Set<String> globalObjectivesBeforeImport = getObjectiveNames(server.getScoreboard());
+            WorldStateService.WorldInitialState importedInitialState = createImportedInitialState(dataTag,
+                    importedWeather,
+                    preserveSavedWorldClocks, overworldClockTicks);
+            createWorldWithDimensions(server, worldName, seed, importedSpawnPos, "normal", WorldMode.NORMAL,
+                    importedInitialState);
 
             ServerLevel overworld = server.getLevel(overWorldKey);
 
@@ -528,6 +290,11 @@ public class MultiWorld implements ModInitializer {
                 LOGGER.error("Failed to create overworld dimension");
                 return false;
             }
+
+            GameRules importedGameRules = WorldImportSupport.extractImportedGameRules(server, sourceWorldFolder,
+                    rawDataTag);
+            applyImportedGameRulesToWorldFamily(server, worldName, importedGameRules);
+            removeLeakedGlobalObjectives(server, globalObjectivesBeforeImport);
 
             File multiworldFolder = new File(serverWorldFolder, NAMESPACE);
             if (!multiworldFolder.exists() && !multiworldFolder.mkdirs()) {
@@ -541,34 +308,40 @@ public class MultiWorld implements ModInitializer {
                 return false;
             }
 
-            File playerDataFolder = new File(sourceWorldFolder, "playerdata");
-            if (playerDataFolder.exists() && playerDataFolder.isDirectory()) {
+            File playerDataFolder = resolvePlayerDataFolder(sourceWorldFolder);
+            File statsFolder = resolvePlayerStatsFolder(sourceWorldFolder);
+            File advancementsFolder = resolvePlayerAdvancementsFolder(sourceWorldFolder);
+            if (playerDataFolder != null) {
                 File[] playerDataFiles = playerDataFolder.listFiles((dir, name) -> name.endsWith(".dat"));
                 if (playerDataFiles != null) {
                     for (File playerDataFile : playerDataFiles) {
                         try {
-                            CompoundTag playerData = NbtIo.readCompressed(playerDataFile.toPath(), NbtAccounter.unlimitedHeap());
+                            CompoundTag playerData = NbtIo.readCompressed(playerDataFile.toPath(),
+                                    NbtAccounter.unlimitedHeap());
 
                             String uuid = playerDataFile.getName().replace(".dat", "");
 
-                            playerData = Utils.migratePlayerDataToCurrentVersion(
+                            playerData = PlayerProfileManager.migratePlayerDataToCurrentVersion(
                                     server,
                                     playerData,
-                                    "import/" + worldName + "/" + uuid
-                            );
+                                    "import/" + worldName + "/" + uuid);
 
-                            updateDimensionInTag(playerData, "respawn", worldName);
+                            WorldImportSupport.updateDimensionInTag(playerData, "respawn", worldName);
 
-                            String dimensionTagString = playerData.getString("Dimension").orElse(Level.OVERWORLD.identifier().toString());
-                            playerData.putString("Dimension", convertDimensionName(dimensionTagString, worldName));
+                            String dimensionTagString = playerData.getString("Dimension")
+                                    .orElse(Level.OVERWORLD.identifier().toString());
+                            playerData.putString("Dimension",
+                                    WorldImportSupport.convertDimensionName(dimensionTagString, worldName));
 
-                            updateDimensionInTag(playerData, "LastDeathLocation", worldName);
+                            WorldImportSupport.updateDimensionInTag(playerData, "LastDeathLocation", worldName);
 
                             JsonObject playerJson = new JsonObject();
                             playerJson.addProperty("player", playerData.toString());
 
-                            File statsFile = new File(sourceWorldFolder, "stats/" + uuid + ".json");
-                            if (statsFile.exists()) {
+                            File statsFile = statsFolder == null
+                                    ? null
+                                    : new File(statsFolder, uuid + ".json");
+                            if (statsFile != null && statsFile.exists()) {
                                 try (FileReader statsReader = new FileReader(statsFile)) {
                                     JsonElement parsed = JsonParser.parseReader(statsReader);
                                     if (parsed != null && parsed.isJsonObject()) {
@@ -577,8 +350,10 @@ public class MultiWorld implements ModInitializer {
                                 }
                             }
 
-                            File advancementsFile = new File(sourceWorldFolder, "advancements/" + uuid + ".json");
-                            if (advancementsFile.exists()) {
+                            File advancementsFile = advancementsFolder == null
+                                    ? null
+                                    : new File(advancementsFolder, uuid + ".json");
+                            if (advancementsFile != null && advancementsFile.exists()) {
                                 try (FileReader advancementsReader = new FileReader(advancementsFile)) {
                                     JsonElement parsed = JsonParser.parseReader(advancementsReader);
                                     if (parsed != null && parsed.isJsonObject()) {
@@ -597,6 +372,9 @@ public class MultiWorld implements ModInitializer {
                         }
                     }
                 }
+            } else {
+                LOGGER.info("No player data directory found in import source '{}'; skipping player profile import",
+                        sourceWorldFolder.getAbsolutePath());
             }
 
             LOGGER.info("World import completed successfully!");
@@ -608,418 +386,123 @@ public class MultiWorld implements ModInitializer {
         }
     }
 
-    private static File resolveImportSourceWorldFolder(File sourceWorldFolder) {
-        if (new File(sourceWorldFolder, "level.dat").exists()) {
-            return sourceWorldFolder;
+    private static File resolvePlayerDataFolder(File sourceWorldFolder) {
+        File legacy = new File(sourceWorldFolder, "playerdata");
+        if (legacy.isDirectory()) {
+            return legacy;
         }
 
-        File parent = sourceWorldFolder.getParentFile();
-        if (parent != null && new File(parent, "level.dat").exists()) {
-            return parent;
+        File modern = new File(sourceWorldFolder, "players/data");
+        if (modern.isDirectory()) {
+            return modern;
         }
 
-        File nestedWorld = new File(sourceWorldFolder, "world");
-        if (nestedWorld.isDirectory() && new File(nestedWorld, "level.dat").exists()) {
-            return nestedWorld;
-        }
-
-        return sourceWorldFolder;
+        return null;
     }
 
-    private static void updateDimensionInTag(CompoundTag parentTag, String tagName, String worldName) {
-        Optional<CompoundTag> tagOpt = parentTag.getCompound(tagName);
-        if (tagOpt.isPresent()) {
-            CompoundTag tag = tagOpt.get();
-            String dimension = tag.getString("dimension").orElse(Level.OVERWORLD.identifier().toString());
-            tag.putString("dimension", convertDimensionName(dimension, worldName));
-            parentTag.put(tagName, tag);
+    private static File resolvePlayerStatsFolder(File sourceWorldFolder) {
+        File legacy = new File(sourceWorldFolder, "stats");
+        if (legacy.isDirectory()) {
+            return legacy;
+        }
+
+        File modern = new File(sourceWorldFolder, "players/stats");
+        if (modern.isDirectory()) {
+            return modern;
+        }
+
+        return null;
+    }
+
+    private static File resolvePlayerAdvancementsFolder(File sourceWorldFolder) {
+        File legacy = new File(sourceWorldFolder, "advancements");
+        if (legacy.isDirectory()) {
+            return legacy;
+        }
+
+        File modern = new File(sourceWorldFolder, "players/advancements");
+        if (modern.isDirectory()) {
+            return modern;
+        }
+
+        return null;
+    }
+
+    private static void applyImportedGameRulesToWorldFamily(MinecraftServer server, String worldName,
+            GameRules importedGameRules) {
+        String[] dimensionNames = { worldName, worldName + "_nether", worldName + "_end" };
+        for (String name : dimensionNames) {
+            ResourceKey<Level> key = ResourceKey.create(Registries.DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, name));
+            ServerLevel level = server.getLevel(key);
+            if (level == null) {
+                continue;
+            }
+
+            level.getGameRules().setAll(importedGameRules, server);
+            WorldStateService.setLastSavedGameRuleSnapshot(
+                    key,
+                    WorldConfigService.encodeGameRules(server, level.getGameRules()).toString());
         }
     }
 
-    private static String convertDimensionName(String originalDimension, String worldName) {
-        String newDimension;
-        if (originalDimension.endsWith("_nether")) {
-            newDimension = worldName + "_nether";
-        } else if (originalDimension.endsWith("_end")) {
-            newDimension = worldName + "_end";
-        } else {
-            newDimension = worldName;
-        }
-        return NAMESPACE + ":" + newDimension;
-    }
-
-    private static void copyWorldFiles(File sourceFolder, String serverWorldFolder, ResourceKey<Level> worldKey) {
-        String worldDirectory = serverWorldFolder + "/dimensions/" +
-                worldKey.identifier().getNamespace() + "/" + worldKey.identifier().getPath();
-
-        copyFilesBeforeWorldCreation(sourceFolder, "region", worldDirectory);
-        copyFilesBeforeWorldCreation(sourceFolder, "poi", worldDirectory);
-        copyFilesBeforeWorldCreation(sourceFolder, "entities", worldDirectory);
-        copyFilesBeforeWorldCreation(sourceFolder, "data", worldDirectory);
-    }
-
-    private static void copyFilesBeforeWorldCreation(File sourceFolder, String type, String destinationPath) {
-        File sourceTypeFolder = new File(sourceFolder, type);
-        if (!sourceTypeFolder.exists() || !sourceTypeFolder.isDirectory()) {
-            return;
-        }
-
-        String fileExtension = type.equals("data") ? ".dat" : ".mca";
-        File[] files = sourceTypeFolder.listFiles((dir, name) -> name.endsWith(fileExtension));
-        if (files == null || files.length == 0) {
-            return;
-        }
-
-        File destinationFolder = new File(destinationPath + "/" + type);
-        if (!destinationFolder.exists() && !destinationFolder.mkdirs()) {
-            LOGGER.error("Could not create destination folder: {}", destinationFolder);
-            return;
-        }
-
-        for (File file : files) {
-            try {
-                Files.copy(
-                        file.toPath(),
-                        new File(destinationFolder, file.getName()).toPath(),
-                        StandardCopyOption.REPLACE_EXISTING
-                );
-            } catch (IOException e) {
-                LOGGER.error("Error copying file {}: {}", file.getName(), e.getMessage());
+    private static void removeLeakedGlobalObjectives(MinecraftServer server,
+            Set<String> globalObjectivesBeforeImport) {
+        ServerScoreboard globalScoreboard = server.getScoreboard();
+        for (String objectiveName : getObjectiveNames(globalScoreboard)) {
+            if (globalObjectivesBeforeImport.contains(objectiveName)) {
+                continue;
+            }
+            Objective objective = globalScoreboard.getObjective(objectiveName);
+            if (objective != null) {
+                globalScoreboard.removeObjective(objective);
             }
         }
+    }
 
-        LOGGER.info("Copied {} files from {} to {}", files.length, type, destinationPath + "/" + type);
+    private static Set<String> getObjectiveNames(ServerScoreboard scoreboard) {
+        Set<String> names = new HashSet<>();
+        for (Objective objective : scoreboard.getObjectives()) {
+            names.add(objective.getName());
+        }
+        return names;
     }
 
     public static void createWorldWithDimensions(MinecraftServer server, String worldString, long seed) {
         createWorldWithDimensions(server, worldString, seed, null, "normal", WorldMode.NORMAL);
     }
 
-    public static void createWorldWithDimensions(MinecraftServer server, String worldString, long seed, BlockPos spawnPos) {
+    public static void createWorldWithDimensions(MinecraftServer server, String worldString, long seed,
+            BlockPos spawnPos) {
         createWorldWithDimensions(server, worldString, seed, spawnPos, "normal", WorldMode.NORMAL);
-        }
+    }
 
-        public static void createWorldWithDimensions(
+    public static void createWorldWithDimensions(
             MinecraftServer server,
             String worldString,
             long seed,
             BlockPos spawnPos,
             String preset,
-            WorldMode worldMode
-        ) {
-        ChunkGenerator overworldGenerator;
-        ChunkGenerator netherGenerator;
-        ChunkGenerator endGenerator;
-
-        boolean flatPreset = "flat".equalsIgnoreCase(preset);
-        if (flatPreset) {
-            var biomeLookup = server.registryAccess().lookupOrThrow(Registries.BIOME);
-            Holder<Biome> voidBiome = biomeLookup.getOrThrow(Biomes.THE_VOID);
-
-            overworldGenerator = new FlatLevelSource(
-                new FlatLevelGeneratorSettings(Optional.empty(), voidBiome, List.of())
-                    .withBiomeAndLayers(
-                        List.of(
-                            new FlatLayerInfo(1, Blocks.BEDROCK),
-                            new FlatLayerInfo(125, Blocks.DIRT),
-                            new FlatLayerInfo(1, Blocks.GRASS_BLOCK)
-                        ),
-                        Optional.empty(),
-                        voidBiome
-                    )
-            );
-            netherGenerator = new FlatLevelSource(
-                new FlatLevelGeneratorSettings(Optional.empty(), voidBiome, List.of())
-                    .withBiomeAndLayers(List.of(), Optional.empty(), voidBiome)
-            );
-            endGenerator = new FlatLevelSource(
-                new FlatLevelGeneratorSettings(Optional.empty(), voidBiome, List.of())
-                    .withBiomeAndLayers(List.of(), Optional.empty(), voidBiome)
-            );
-        } else {
-            overworldGenerator = createVanillaOverworldGenerator(server);
-            netherGenerator = createVanillaNetherGenerator(server);
-            endGenerator = createVanillaEndGenerator(server);
-        }
-
-        GameType gameMode = worldMode == WorldMode.CREATIVE ? GameType.CREATIVE : null;
-        BlockPos effectiveSpawnPos = worldMode == WorldMode.CREATIVE ? BlockPos.ZERO : spawnPos;
-
-        createWorld(server, worldString, BuiltinDimensionTypes.OVERWORLD, overworldGenerator, seed, effectiveSpawnPos, gameMode, worldMode);
-        createWorld(server, worldString + "_nether", BuiltinDimensionTypes.NETHER, netherGenerator, seed, BlockPos.ZERO, gameMode, worldMode);
-        createWorld(server, worldString + "_end", BuiltinDimensionTypes.END, endGenerator, seed, BlockPos.ZERO, gameMode, worldMode);
-        registerWorldMode(worldString, worldMode);
+            WorldMode worldMode) {
+        WorldStateService.WorldInitialState initialState = createFreshInitialState(worldMode);
+        rememberPendingInitialState(worldString, initialState);
+        createWorldWithDimensions(server, worldString, seed, spawnPos, preset, worldMode, initialState);
     }
 
-    private static void createWorld(MinecraftServer server, String worldString, ResourceKey<DimensionType> dimensionType, ChunkGenerator generator, BlockPos spawnPos, GameType gameMode) {
-        createWorld(server, worldString, dimensionType, generator, server.overworld().getSeed(), spawnPos, gameMode, gameMode == GameType.CREATIVE ? WorldMode.CREATIVE : WorldMode.NORMAL);
-    }
-
-    private static void createWorld(
+    private static void createWorldWithDimensions(
             MinecraftServer server,
             String worldString,
-            ResourceKey<DimensionType> dimensionType,
-            ChunkGenerator generator,
             long seed,
             BlockPos spawnPos,
-                GameType gameMode,
-                WorldMode worldMode
-    ) {
-        ResourceKey<Level> worldKey = ResourceKey.create(
-                Registries.DIMENSION,
-                Identifier.fromNamespaceAndPath(NAMESPACE, worldString)
-        );
-
-        if (server.getLevel(worldKey) != null) {
-            ServerLevel world = server.getLevel(worldKey);
-            if (world instanceof CustomServerWorld) {
-                return;
-            } else {
-                for (ServerPlayer player : world.players()) {
-                    Utils.saveInv(player, getBaseWorldName(worldKey.identifier().getPath()));
-                    Utils.loadInv(player, "overworld");
-                }
-                unload(server, world);
-            }
-        }
-
-        Holder.Reference<DimensionType> dimensionTypeEntry = server.registryAccess().lookupOrThrow(Registries.DIMENSION_TYPE).getOrThrow(dimensionType);
-
-        LevelStem options = new LevelStem(dimensionTypeEntry, generator);
-
-        RegistryAccess.Frozen registryManager = server.registries().compositeAccess();
-        MappedRegistry<LevelStem> dimensionsRegistry = (MappedRegistry<LevelStem>) registryManager.lookupOrThrow(Registries.LEVEL_STEM);
-
-        boolean isFrozen = ((CustomSimpleRegistry<?>) dimensionsRegistry).multiWorld$isFrozen();
-        ((CustomSimpleRegistry<?>) dimensionsRegistry).multiWorld$setFrozen(false);
-
-        ResourceKey<LevelStem> dimensionKey = ResourceKey.create(Registries.LEVEL_STEM, worldKey.identifier());
-        if (!dimensionsRegistry.containsKey(dimensionKey)) {
-            dimensionsRegistry.register(dimensionKey, options, RegistrationInfo.BUILT_IN);
-        }
-
-        ((CustomSimpleRegistry<?>) dimensionsRegistry).multiWorld$setFrozen(isFrozen);
-
-        var levelProperties = server.getWorldData().overworldData();
-        CustomServerWorldProperties newLevelProperties = new CustomServerWorldProperties(server.getWorldData(), levelProperties, seed);
-
-        CustomServerWorld.Constructor worldConstructor = CustomServerWorld::new;
-        CustomServerWorld addedWorld = worldConstructor.create(server, worldKey, options, newLevelProperties, seed);
-        initializeCustomWorldState(addedWorld);
-
-        if (gameMode != null) {
-            ((ServerLevelAccessor) addedWorld).getWorldProperties().setGameType(gameMode);
-        }
-
-        // Set up dragon fight for custom end worlds
-        if (dimensionType.equals(BuiltinDimensionTypes.END)) {
-            net.minecraft.world.level.dimension.end.EnderDragonFight dragonFight =
-                net.minecraft.world.level.dimension.end.EnderDragonFight.createDefault();
-            dragonFight.init(addedWorld, seed, ServerLevel.END_SPAWN_POINT);
-            addedWorld.setDragonFight(dragonFight);
-        }
-
-        ((IMinecraftServerMixin) server).getWorlds().put(addedWorld.dimension(), addedWorld);
-
-        BlockPos resolvedSpawn;
-        if (spawnPos != null) {
-            // Keep configured X/Z but place Y on a valid surface for reliable respawn.
-            int surfaceY = addedWorld.getHeight(Heightmap.Types.MOTION_BLOCKING, spawnPos.getX(), spawnPos.getZ());
-            int safeY = surfaceY > addedWorld.getMinY() ? surfaceY : 63;
-            resolvedSpawn = new BlockPos(spawnPos.getX(), safeY, spawnPos.getZ());
-        } else {
-            // Use the exact vanilla initial spawn pipeline.
-            IMinecraftServerMixin.invokeSetupSpawn(
-                    addedWorld,
-                    newLevelProperties,
-                    false,
-                    false,
-                    ((IMinecraftServerMixin) server).multiWorld$getLevelLoadListener()
-            );
-            LevelData.RespawnData respawnData = newLevelProperties.getRespawnData();
-            if (respawnData != null) {
-                resolvedSpawn = respawnData.pos();
-            } else {
-                resolvedSpawn = BlockPos.ZERO.above(80);
-            }
-        }
-        newLevelProperties.setSpawn(new LevelData.RespawnData(new GlobalPos(worldKey, resolvedSpawn), 0.0F, 0.0F));
-
-        saveWorldConfig(
-                server,
-                worldString,
-                dimensionType,
-                generator,
-                generator instanceof FlatLevelSource ? "flat" : worldString.endsWith("_nether") ? "nether" : worldString.endsWith("_end") ? "end" : "overworld",
-                seed,
-                spawnPos,
-                gameMode,
-                worldMode,
-                addedWorld.getGameRules()
-        );
-
-        LOGGER.info("Successfully loaded world '{}'", worldString);
-    }
-
-    private static void unload(MinecraftServer server, ServerLevel world) {
-        ResourceKey<Level> dimensionKey = world.dimension();
-
-        if (((IMinecraftServerMixin) server).getWorlds().remove(dimensionKey, world)) {
-            world.save(new ProgressListener() {
-                @Override
-                public void progressStartNoAbort(Component title) {}
-
-                @Override
-                public void progressStart(Component title) {}
-
-                @Override
-                public void progressStage(Component task) {}
-
-                @Override
-                public void progressStagePercentage(int percentage) {}
-
-                @Override
-                public void stop() {}
-            }, true, false);
-
-            RegistryAccess.Frozen registryManager = server.registries().compositeAccess();
-            MappedRegistry<LevelStem> dimensionsRegistry = (MappedRegistry<LevelStem>) registryManager.lookupOrThrow(Registries.LEVEL_STEM);
-            CustomSimpleRegistry.remove(dimensionsRegistry, dimensionKey.identifier());
-            clearCustomWorldState(dimensionKey);
-        }
+            String preset,
+            WorldMode worldMode,
+            WorldStateService.WorldInitialState initialState) {
+        WorldLifecycleService.createWorldWithDimensions(server, worldString, seed, spawnPos, preset, worldMode,
+                initialState);
     }
 
     public static void deleteWorld(MinecraftServer server, String worldName) {
-        LOGGER.info("Deleting world: {}", worldName);
-        registerWorldMode(worldName, WorldMode.NORMAL);
-
-        ResourceKey<Level> overWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
-        ResourceKey<Level> netherWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_nether"));
-        ResourceKey<Level> endWorldKey = ResourceKey.create(Registries.DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, worldName + "_end"));
-
-        ServerLevel overworld = server.getLevel(overWorldKey);
-        ServerLevel nether = server.getLevel(netherWorldKey);
-        ServerLevel end = server.getLevel(endWorldKey);
-
-        RegistryAccess.Frozen registryManager = server.registries().compositeAccess();
-        MappedRegistry<LevelStem> dimensionsRegistry = (MappedRegistry<LevelStem>) registryManager.lookupOrThrow(Registries.LEVEL_STEM);
-
-        if (overworld != null) {
-            CustomSimpleRegistry.remove(dimensionsRegistry, overWorldKey.identifier());
-        }
-        if (nether != null) {
-            CustomSimpleRegistry.remove(dimensionsRegistry, netherWorldKey.identifier());
-        }
-        if (end != null) {
-            CustomSimpleRegistry.remove(dimensionsRegistry, endWorldKey.identifier());
-        }
-
-        String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
-
-        if (overworld != null) {
-            deleteWorldFiles(serverWorldFolder, overWorldKey);
-            ((IMinecraftServerMixin) server).getWorlds().remove(overWorldKey);
-            clearCustomWorldState(overWorldKey);
-        }
-        if (nether != null) {
-            deleteWorldFiles(serverWorldFolder, netherWorldKey);
-            ((IMinecraftServerMixin) server).getWorlds().remove(netherWorldKey);
-            clearCustomWorldState(netherWorldKey);
-        }
-        if (end != null) {
-            deleteWorldFiles(serverWorldFolder, endWorldKey);
-            ((IMinecraftServerMixin) server).getWorlds().remove(endWorldKey);
-            clearCustomWorldState(endWorldKey);
-        }
-
-        File multiworldFolder = new File(serverWorldFolder, NAMESPACE);
-        File worldNameFolder = new File(multiworldFolder, worldName);
-        if (worldNameFolder.exists()) {
-            deleteFolder(worldNameFolder);
-        }
-
-        LOGGER.info("World deletion completed: {}", worldName);
+        WorldLifecycleService.deleteWorld(server, worldName);
     }
 
-    private static void deleteWorldFiles(String serverWorldFolder, ResourceKey<Level> worldKey) {
-        String worldPath = serverWorldFolder + "/dimensions/" +
-                worldKey.identifier().getNamespace() + "/" + worldKey.identifier().getPath();
-        File worldFolder = new File(worldPath);
-
-        if (worldFolder.exists()) {
-            deleteFolder(worldFolder);
-        }
-    }
-
-    private static void deleteFolder(File folder) {
-        File[] files = folder.listFiles();
-        if (files != null) {
-            for (File file : files) {
-                if (file.isDirectory()) {
-                    deleteFolder(file);
-                } else {
-                    file.delete();
-                }
-            }
-        }
-        folder.delete();
-    }
-
-    private static CompoundTag encodeGameRules(MinecraftServer server, GameRules gameRules) {
-        Object encoded = GameRules.codec(server.getWorldData().enabledFeatures())
-                .encodeStart(NbtOps.INSTANCE, gameRules)
-                .result()
-                .orElse(null);
-        if (encoded instanceof CompoundTag compoundTag) {
-            return compoundTag;
-        }
-        return new CompoundTag();
-    }
-
-    private static GameRules decodeGameRules(MinecraftServer server, CompoundTag gameRulesTag) {
-        return GameRules.codec(server.getWorldData().enabledFeatures())
-                .parse(NbtOps.INSTANCE, gameRulesTag)
-                .result()
-                .orElseGet(() -> new GameRules(server.getWorldData().enabledFeatures()));
-    }
-
-    private static void autosaveCustomWorldGameRules(MinecraftServer server) {
-        if (--gameRuleAutosaveCooldown > 0) {
-            return;
-        }
-        gameRuleAutosaveCooldown = GAME_RULE_AUTOSAVE_INTERVAL_TICKS;
-        persistCustomWorldGameRules(server, false);
-    }
-
-    private static void persistCustomWorldGameRules(MinecraftServer server, boolean force) {
-        for (ServerLevel world : server.getAllLevels()) {
-            if (!NAMESPACE.equals(world.dimension().identifier().getNamespace())) {
-                continue;
-            }
-
-            ResourceKey<Level> worldKey = world.dimension();
-            CompoundTag encodedRules = encodeGameRules(server, world.getGameRules());
-            String currentSnapshot = encodedRules.toString();
-            String previousSnapshot = LAST_SAVED_GAMERULE_SNAPSHOTS.get(worldKey);
-            if (!force && currentSnapshot.equals(previousSnapshot)) {
-                continue;
-            }
-
-            String worldName = world.dimension().identifier().getPath();
-            String serverWorldFolder = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT).toString();
-            File configFile = new File(serverWorldFolder + "/dimensions/" + NAMESPACE + "/" + worldName + "/data/" + CONFIG_FILE_NAME);
-            if (!configFile.exists()) {
-                continue;
-            }
-
-            try {
-                CompoundTag configNbt = NbtIo.readCompressed(configFile.toPath(), NbtAccounter.unlimitedHeap());
-                configNbt.put("gameRules", encodedRules);
-                NbtIo.writeCompressed(configNbt, configFile.toPath());
-                LAST_SAVED_GAMERULE_SNAPSHOTS.put(worldKey, currentSnapshot);
-            } catch (Exception e) {
-                LOGGER.warn("Failed to persist gamerules for world '{}': {}", worldName, e.getMessage());
-            }
-        }
-    }
 }

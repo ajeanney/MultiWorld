@@ -33,13 +33,7 @@ public abstract class ServerLevelMixin {
     @Shadow
     public abstract ServerChunkCache getChunkSource();
 
-    @ModifyArgs(
-            method = "<init>",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/Level;<init>(Lnet/minecraft/world/level/storage/WritableLevelData;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/core/RegistryAccess;Lnet/minecraft/core/Holder;ZZJI)V"
-            )
-    )
+    @ModifyArgs(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;<init>(Lnet/minecraft/world/level/storage/WritableLevelData;Lnet/minecraft/resources/ResourceKey;Lnet/minecraft/core/RegistryAccess;Lnet/minecraft/core/Holder;ZZJI)V"))
     private static void modifySeedForWorldConstructor(Args args) {
         ResourceKey<Level> worldKey = args.get(1);
         long seed = args.get(6);
@@ -49,19 +43,13 @@ public abstract class ServerLevelMixin {
         }
     }
 
-    @Redirect(
-            method = "<init>",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/levelgen/WorldOptions;seed()J"
-            )
-    )
+    @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/levelgen/WorldOptions;seed()J"))
     private long redirectGetSeed(WorldOptions instance,
-                                 MinecraftServer server, Executor workerExecutor,
-                                 LevelStorageSource.LevelStorageAccess session, ServerLevelData properties,
-                                 ResourceKey<Level> worldKey, LevelStem dimensionOptions,
-                                 boolean debugWorld, long seed, List<CustomSpawner> spawners,
-                                 boolean shouldTickTime) {
+            MinecraftServer server, Executor workerExecutor,
+            LevelStorageSource.LevelStorageAccess session, ServerLevelData properties,
+            ResourceKey<Level> worldKey, LevelStem dimensionOptions,
+            boolean debugWorld, long seed, List<CustomSpawner> spawners,
+            boolean shouldTickTime) {
         if (Objects.equals(worldKey.identifier().getNamespace(), NAMESPACE)) {
             return seed;
         }

@@ -28,8 +28,10 @@ public class PlayerStateSeparationTest {
         createWorld(helper, player, WORLD_NAME);
 
         // Get a mob effect holder (SPEED)
-        Optional<Holder.Reference<MobEffect>> speedEffect = BuiltInRegistries.MOB_EFFECT.get(Identifier.parse("minecraft:speed"));
-        if (speedEffect.isEmpty()) helper.fail("Could not find SPEED mob effect");
+        Optional<Holder.Reference<MobEffect>> speedEffect = BuiltInRegistries.MOB_EFFECT
+                .get(Identifier.parse("minecraft:speed"));
+        if (speedEffect.isEmpty())
+            helper.fail("Could not find SPEED mob effect");
         Holder<MobEffect> speed = speedEffect.get();
 
         // --- Set up overworld state ---
@@ -46,7 +48,8 @@ public class PlayerStateSeparationTest {
         assertFloatNear(helper, player.getHealth(), 10.0f, 0.1f, "overworld health");
         assertIntEquals(helper, player.getFoodData().getFoodLevel(), 10, "overworld food level");
         assertIntEquals(helper, player.getAirSupply(), 100, "overworld air supply");
-        if (!player.hasEffect(speed)) helper.fail("Player should have SPEED in overworld");
+        if (!player.hasEffect(speed))
+            helper.fail("Player should have SPEED in overworld");
         assertIntEquals(helper, player.experienceLevel, 30, "overworld XP level");
 
         float owYaw = player.getYRot();
@@ -66,8 +69,10 @@ public class PlayerStateSeparationTest {
             assertNoItem(helper, player, Items.DIAMOND_SWORD, "in custom world");
 
             // Set custom world state
-            Optional<Holder.Reference<MobEffect>> poisonEffect = BuiltInRegistries.MOB_EFFECT.get(Identifier.parse("minecraft:poison"));
-            if (poisonEffect.isEmpty()) helper.fail("Could not find POISON mob effect");
+            Optional<Holder.Reference<MobEffect>> poisonEffect = BuiltInRegistries.MOB_EFFECT
+                    .get(Identifier.parse("minecraft:poison"));
+            if (poisonEffect.isEmpty())
+                helper.fail("Could not find POISON mob effect");
             Holder<MobEffect> poison = poisonEffect.get();
 
             player.setHealth(5.0f);
@@ -122,7 +127,8 @@ public class PlayerStateSeparationTest {
 
     // --- Assertion helpers ---
 
-    private static void assertFloatNear(GameTestHelper helper, float actual, float expected, float tolerance, String context) {
+    private static void assertFloatNear(GameTestHelper helper, float actual, float expected, float tolerance,
+            String context) {
         if (Math.abs(actual - expected) > tolerance) {
             helper.fail("Expected " + expected + " (±" + tolerance + ") " + context + ", but was " + actual);
         }

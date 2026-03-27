@@ -22,7 +22,8 @@ public interface IMinecraftServerMixin {
     LevelStorageSource.LevelStorageAccess getSession();
 
     @Invoker("setInitialSpawn")
-    static void invokeSetupSpawn(ServerLevel world, ServerLevelData worldProperties, boolean bonusChest, boolean debugWorld, LevelLoadListener loadProgress) {
+    static void invokeSetupSpawn(ServerLevel world, ServerLevelData worldProperties, boolean bonusChest,
+            boolean debugWorld, LevelLoadListener loadProgress) {
         throw new AssertionError();
     }
 

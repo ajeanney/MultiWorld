@@ -19,15 +19,9 @@ import static fr.jeanney.MultiWorld.NAMESPACE;
 @Mixin(ServerPlayer.class)
 public abstract class ServerPlayerMixin {
 
-    @Redirect(
-            method = "findRespawnPositionAndUseSpawnBlock",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/MinecraftServer;getLevel(Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/server/level/ServerLevel;"
-            )
-    )
+    @Redirect(method = "findRespawnPositionAndUseSpawnBlock", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;getLevel(Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/server/level/ServerLevel;"))
     private ServerLevel redirectGetWorld(MinecraftServer server, ResourceKey<Level> registryKey) {
-        ServerPlayer player = (ServerPlayer)(Object)this;
+        ServerPlayer player = (ServerPlayer) (Object) this;
         ServerLevel currentWorld = player.level();
 
         ServerLevel originalWorld = server.getLevel(registryKey);

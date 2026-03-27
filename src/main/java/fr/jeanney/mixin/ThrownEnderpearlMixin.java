@@ -12,27 +12,13 @@ import static fr.jeanney.CustomServerWorld.getMockRegistryKey;
 @Mixin(ThrownEnderpearl.class)
 public abstract class ThrownEnderpearlMixin {
 
-    @Redirect(
-            method = "canTeleport",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;",
-                    ordinal = 0
-            )
-    )
-    private ResourceKey<Level> redirectFromGetRegistryKey(Level world) {
-        return getMockRegistryKey(world.dimension());
-    }
+        @Redirect(method = "canTeleport", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;", ordinal = 0))
+        private ResourceKey<Level> redirectFromGetRegistryKey(Level world) {
+                return getMockRegistryKey(world.dimension());
+        }
 
-    @Redirect(
-            method = "canTeleport",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;",
-                    ordinal = 1
-            )
-    )
-    private ResourceKey<Level> redirectToGetRegistryKey(Level world) {
-        return getMockRegistryKey(world.dimension());
-    }
+        @Redirect(method = "canTeleport", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;", ordinal = 1))
+        private ResourceKey<Level> redirectToGetRegistryKey(Level world) {
+                return getMockRegistryKey(world.dimension());
+        }
 }

@@ -17,32 +17,18 @@ public abstract class EntityMixin {
 
     @Inject(at = @At("HEAD"), method = "handlePortal", cancellable = true)
     public void handlePortal(CallbackInfo ci) {
-        Entity self = (Entity)(Object)this;
+        Entity self = (Entity) (Object) this;
         if (!isWorldWithNether(self.level().dimension())) {
             ci.cancel();
         }
     }
 
-    @Redirect(
-            method = "canTeleport",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;",
-                    ordinal = 0
-            )
-    )
+    @Redirect(method = "canTeleport", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;", ordinal = 0))
     private ResourceKey<Level> redirectFromGetRegistryKey(Level world) {
         return getMockRegistryKey(world.dimension());
     }
 
-    @Redirect(
-            method = "canTeleport",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;",
-                    ordinal = 1
-            )
-    )
+    @Redirect(method = "canTeleport", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;", ordinal = 1))
     private ResourceKey<Level> redirectToGetRegistryKey(Level world) {
         return getMockRegistryKey(world.dimension());
     }

@@ -12,20 +12,12 @@ import static fr.jeanney.CustomServerWorld.getMockRegistryKey;
 @Mixin(FallingBlockEntity.class)
 public abstract class FallingBlockEntityMixin {
 
-    @ModifyVariable(
-            method = "teleport",
-            at = @At(value = "STORE"),
-            ordinal = 0
-    )
+    @ModifyVariable(method = "teleport", at = @At(value = "STORE"), ordinal = 0)
     private ResourceKey<Level> modifyRegistryKey(ResourceKey<Level> registryKey) {
         return getMockRegistryKey(registryKey);
     }
 
-    @ModifyVariable(
-            method = "teleport",
-            at = @At(value = "STORE"),
-            ordinal = 1
-    )
+    @ModifyVariable(method = "teleport", at = @At(value = "STORE"), ordinal = 1)
     private ResourceKey<Level> modifyRegistryKey2(ResourceKey<Level> registryKey2) {
         return getMockRegistryKey(registryKey2);
     }

@@ -26,8 +26,10 @@ public class InventorySwitchTest {
         runPlayerCommand(helper, player, "creative");
 
         helper.runAfterDelay(10, () -> {
-            if (!NAMESPACE.equals(player.level().dimension().identifier().getNamespace()) || !isCreativeWorld(player.level().dimension())) {
-                helper.fail("Player should be in a creative-mode multiworld after /creative but was " + player.level().dimension().identifier());
+            if (!NAMESPACE.equals(player.level().dimension().identifier().getNamespace())
+                    || !isCreativeWorld(player.level().dimension())) {
+                helper.fail("Player should be in a creative-mode multiworld after /creative but was "
+                        + player.level().dimension().identifier());
                 return;
             }
             assertNoItem(helper, player, Items.DIAMOND, "after switching to creative");

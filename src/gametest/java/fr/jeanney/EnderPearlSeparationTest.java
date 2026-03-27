@@ -41,7 +41,8 @@ public class EnderPearlSeparationTest {
             helper.fail("Player should have an ender pearl in flight");
         }
 
-        // Wait a couple ticks for the pearl to start moving, then switch to custom world
+        // Wait a couple ticks for the pearl to start moving, then switch to custom
+        // world
         helper.runAfterDelay(3, () -> {
             // Step 1: /mw tp while pearl is in the air
             teleportToWorld(helper, player, WORLD_NAME);

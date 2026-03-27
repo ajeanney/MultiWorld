@@ -22,14 +22,29 @@ import java.util.stream.Stream;
 
 @Mixin(MappedRegistry.class)
 public abstract class MappedRegistryMixin<T> implements CustomSimpleRegistry<T>, WritableRegistry<T> {
-    @Shadow private boolean frozen;
-    @Shadow @Final private Map<T, Holder.Reference<T>> byValue;
-    @Shadow @Final private Reference2IntMap<T> toId;
-    @Shadow @Final private Map<ResourceKey<T>, Holder.Reference<T>> byKey;
-    @Shadow @Final private Map<Identifier, Holder.Reference<T>> byLocation;
-    @Shadow @Final private ObjectList<Holder.Reference<T>> byId;
-    @Shadow @Final private Map<ResourceKey<T>, RegistrationInfo> registrationInfos;
-    @Shadow @Final private ResourceKey<? extends net.minecraft.core.Registry<T>> key;
+    @Shadow
+    private boolean frozen;
+    @Shadow
+    @Final
+    private Map<T, Holder.Reference<T>> byValue;
+    @Shadow
+    @Final
+    private Reference2IntMap<T> toId;
+    @Shadow
+    @Final
+    private Map<ResourceKey<T>, Holder.Reference<T>> byKey;
+    @Shadow
+    @Final
+    private Map<Identifier, Holder.Reference<T>> byLocation;
+    @Shadow
+    @Final
+    private ObjectList<Holder.Reference<T>> byId;
+    @Shadow
+    @Final
+    private Map<ResourceKey<T>, RegistrationInfo> registrationInfos;
+    @Shadow
+    @Final
+    private ResourceKey<? extends net.minecraft.core.Registry<T>> key;
 
     @Override
     public boolean multiWorld$remove(T entry) {

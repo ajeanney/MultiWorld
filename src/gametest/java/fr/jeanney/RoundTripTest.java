@@ -51,7 +51,8 @@ public class RoundTripTest {
             teleportToWorld(helper, player, "overworld");
 
             helper.runAfterDelay(10, () -> {
-                // Should be back in overworld with diamond, without emerald, at overworld position
+                // Should be back in overworld with diamond, without emerald, at overworld
+                // position
                 assertInDimension(helper, player, "minecraft", "overworld");
                 assertHasItem(helper, player, Items.DIAMOND, "back in overworld");
                 assertNoItem(helper, player, Items.EMERALD, "back in overworld (emerald stayed in custom world)");
@@ -61,7 +62,8 @@ public class RoundTripTest {
                 teleportToWorld(helper, player, WORLD_NAME);
 
                 helper.runAfterDelay(10, () -> {
-                    // Should be back in custom world with emerald, without diamond, at custom-world position
+                    // Should be back in custom world with emerald, without diamond, at custom-world
+                    // position
                     assertInDimension(helper, player, NAMESPACE, WORLD_NAME);
                     assertHasItem(helper, player, Items.EMERALD, "back in custom world");
                     assertNoItem(helper, player, Items.DIAMOND, "back in custom world (diamond stayed in overworld)");

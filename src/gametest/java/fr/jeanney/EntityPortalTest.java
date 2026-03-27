@@ -86,7 +86,8 @@ public class EntityPortalTest {
         BlockPos portalPos = new BlockPos(0, 64, 10);
         overworld.setBlock(portalPos, Blocks.END_PORTAL.defaultBlockState(), 2);
 
-        ItemEntity item = new ItemEntity(overworld, portalPos.getX() + 0.5, portalPos.getY() + 0.3, portalPos.getZ() + 0.5,
+        ItemEntity item = new ItemEntity(overworld, portalPos.getX() + 0.5, portalPos.getY() + 0.3,
+                portalPos.getZ() + 0.5,
                 new ItemStack(Items.DIAMOND, 1));
         overworld.addFreshEntity(item);
 
@@ -109,7 +110,8 @@ public class EntityPortalTest {
         BlockPos portalPos = new BlockPos(0, 64, 20);
         overworld.setBlock(portalPos, Blocks.END_PORTAL.defaultBlockState(), 2);
 
-        FallingBlockEntity sand = FallingBlockEntity.fall(overworld, portalPos.above(), Blocks.SAND.defaultBlockState());
+        FallingBlockEntity sand = FallingBlockEntity.fall(overworld, portalPos.above(),
+                Blocks.SAND.defaultBlockState());
 
         TeleportTransition transition = ((EndPortalBlock) Blocks.END_PORTAL)
                 .getPortalDestination(overworld, sand, portalPos);
@@ -142,7 +144,8 @@ public class EntityPortalTest {
             buildNetherPortal(customLevel, base);
             BlockPos portalPos = base.offset(1, 1, 0);
 
-            ItemEntity item = new ItemEntity(customLevel, portalPos.getX() + 0.5, portalPos.getY(), portalPos.getZ() + 0.5,
+            ItemEntity item = new ItemEntity(customLevel, portalPos.getX() + 0.5, portalPos.getY(),
+                    portalPos.getZ() + 0.5,
                     new ItemStack(Items.DIAMOND, 1));
             customLevel.addFreshEntity(item);
 
@@ -207,7 +210,8 @@ public class EntityPortalTest {
             BlockPos portalPos = player.blockPosition().offset(5, 0, 0);
             customLevel.setBlock(portalPos, Blocks.END_PORTAL.defaultBlockState(), 2);
 
-            ItemEntity item = new ItemEntity(customLevel, portalPos.getX() + 0.5, portalPos.getY() + 0.3, portalPos.getZ() + 0.5,
+            ItemEntity item = new ItemEntity(customLevel, portalPos.getX() + 0.5, portalPos.getY() + 0.3,
+                    portalPos.getZ() + 0.5,
                     new ItemStack(Items.DIAMOND, 1));
             customLevel.addFreshEntity(item);
 
@@ -240,7 +244,8 @@ public class EntityPortalTest {
             BlockPos portalPos = player.blockPosition().offset(5, 0, 10);
             customLevel.setBlock(portalPos, Blocks.END_PORTAL.defaultBlockState(), 2);
 
-            FallingBlockEntity sand = FallingBlockEntity.fall(customLevel, portalPos.above(), Blocks.SAND.defaultBlockState());
+            FallingBlockEntity sand = FallingBlockEntity.fall(customLevel, portalPos.above(),
+                    Blocks.SAND.defaultBlockState());
 
             TeleportTransition transition = ((EndPortalBlock) Blocks.END_PORTAL)
                     .getPortalDestination(customLevel, sand, portalPos);
@@ -275,7 +280,7 @@ public class EntityPortalTest {
     }
 
     private static void assertDimensionKey(GameTestHelper helper, ResourceKey<Level> actual,
-                                           String expectedNamespace, String expectedPath, String context) {
+            String expectedNamespace, String expectedPath, String context) {
         String ns = actual.identifier().getNamespace();
         String path = actual.identifier().getPath();
         if (!expectedNamespace.equals(ns) || !expectedPath.equals(path)) {
