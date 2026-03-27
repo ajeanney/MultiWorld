@@ -1,33 +1,39 @@
 {
-  "required": true,
-  "package": "fr.jeanney.mixin",
-  "compatibilityLevel": "JAVA_25",
-  "mixins": [
-    "BaseFireBlockMixin",
-    "PlayerAdvancementsMixin",
-    "ChangeDimensionTriggerMixin",
-    "ThrownEnderpearlMixin",
-    "TheEndGatewayBlockEntityMixin",
-    "EndPortalBlockMixin",
-    "EntityMixin",
-    "FallingBlockEntityMixin",
-    "IMinecraftServerMixin",
-    "MapItemSavedDataMixin",
-    "NetherPortalBlockMixin",
-    "ServerPlayerAccessor",
-    "ServerPlayerMixin",
-    "ServerLevelAccessor",
-    "ServerLevelMixin",
-    "MappedRegistryMixin",
-    "PlayerSpawnFinderAccessor",
-    "StatsCounterAccessor",
-    "TeleportTransitionMixin",
-    "TeleportTransitionAccessor"
-  ],
-  "injectors": {
-    "defaultRequire": 1
-  },
-  "overwrites": {
-    "requireAnnotations": true
-  }
+	"required": true,
+	"package": "fr.jeanney.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"mixins": [
+		"BaseFireBlockMixin",
+		"ChangeDimensionTriggerMixin",
+		"EndPortalBlockMixin",
+		"EntityMixin",
+		"FallingBlockEntityMixin",
+		"IMinecraftServerMixin",
+		"MapItemSavedDataMixin",
+		"MappedRegistryMixin",
+		"NetherPortalBlockMixin",
+		"PlayerAdvancementsAccessor",
+		"PlayerAdvancementsMixin",
+		"PlayerListMixin",
+		"PlayerSpawnFinderAccessor",
+		"ScoreboardCommandMixin",
+		"ServerLevelAccessor",
+		"ServerLevelClockMixin",
+		"ServerLevelMixin",
+		"ServerPlayerAccessor",
+		"ServerPlayerMixin",
+		"ServerStatsCounterAccessor",
+		"StatsCounterAccessor",
+		"TeleportTransitionAccessor",
+		"TeleportTransitionMixin",
+		"TheEndGatewayBlockEntityMixin",
+		"ThrownEnderpearlMixin",
+		"TimeCommandMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
 }

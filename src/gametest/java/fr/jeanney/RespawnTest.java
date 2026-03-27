@@ -71,14 +71,18 @@ public class RespawnTest {
 
         // --- 4. Go to nether, kill -> respawn in overworld ---
         ServerLevel nether = server.getLevel(Level.NETHER);
-        if (nether == null) { helper.fail("Nether not found"); return; }
+        if (nether == null) {
+            helper.fail("Nether not found");
+            return;
+        }
         teleportToDimension(helper, player, server, "minecraft:the_nether");
         assertInDimension(helper, player, "minecraft", "the_nether");
 
         player = killAndRespawn(player, server);
         assertInDimension(helper, player, "minecraft", "overworld");
 
-        // --- 5. Go to nether, set respawn anchor, kill -> respawn at anchor in nether ---
+        // --- 5. Go to nether, set respawn anchor, kill -> respawn at anchor in nether
+        // ---
         teleportToDimension(helper, player, server, "minecraft:the_nether");
         assertInDimension(helper, player, "minecraft", "the_nether");
 
@@ -110,7 +114,7 @@ public class RespawnTest {
     // ========================
 
     @GameTest(maxTicks = 4000)
-        public void customWorldRespawnSequence(GameTestHelper helper) {
+    public void customWorldRespawnSequence(GameTestHelper helper) {
         ServerPlayer player = createMockServerPlayer(helper);
         MinecraftServer server = helper.getLevel().getServer();
         ensureAdvancementsDir(server);
@@ -119,7 +123,7 @@ public class RespawnTest {
         // Go to custom world
         teleportToWorld(helper, player, RESPawn_WORLD);
 
-        final ServerPlayer[] ref = {player};
+        final ServerPlayer[] ref = { player };
         helper.runAfterDelay(10, () -> {
             ServerPlayer current = ref[0];
             assertInDimension(helper, current, NAMESPACE, RESPawn_WORLD);
@@ -136,13 +140,13 @@ public class RespawnTest {
             BlockPos bedPos = current.blockPosition().offset(3, 0, 0);
             placeBedWithPlatform(customLevel, bedPos, Direction.NORTH);
             current.setRespawnPosition(new ServerPlayer.RespawnConfig(
-                LevelData.RespawnData.of(customKey, bedPos, 0f, 0f), false), false);
+                    LevelData.RespawnData.of(customKey, bedPos, 0f, 0f), false), false);
 
             current = killAndRespawn(current, server);
             assertInDimension(helper, current, NAMESPACE, RESPawn_WORLD);
             assertRespawnNearWorldSpawn(helper, current, customLevel, "custom world fallback spawn after broken bed");
             assertNearPosition(helper, current, bedPos.getX(), bedPos.getY(), bedPos.getZ(),
-                BED_TOLERANCE, "respawn at custom-world bed");
+                    BED_TOLERANCE, "respawn at custom-world bed");
 
             // --- 3. Destroy bed, kill -> respawn in custom world (world spawn) ---
             customLevel.removeBlock(bedPos, false);
@@ -166,12 +170,12 @@ public class RespawnTest {
             ServerLevel customNetherLevel = (ServerLevel) current.level();
             placeRespawnAnchorWithPlatform(customNetherLevel, anchorPos);
             current.setRespawnPosition(new ServerPlayer.RespawnConfig(
-                LevelData.RespawnData.of(customNetherLevel.dimension(), anchorPos, 0f, 0f), false), false);
+                    LevelData.RespawnData.of(customNetherLevel.dimension(), anchorPos, 0f, 0f), false), false);
 
             current = killAndRespawn(current, server);
             assertInDimension(helper, current, NAMESPACE, RESPawn_WORLD + "_nether");
             assertNearPosition(helper, current, anchorPos.getX(), anchorPos.getY(), anchorPos.getZ(),
-                BED_TOLERANCE, "respawn at custom_nether anchor");
+                    BED_TOLERANCE, "respawn at custom_nether anchor");
 
             // --- 6. Remove anchor, go to custom_end, kill -> respawn in custom world ---
             customNetherLevel.removeBlock(anchorPos, false);
@@ -244,7 +248,8 @@ public class RespawnTest {
 
     // --- Helpers ---
 
-    private static void teleportToDimension(GameTestHelper helper, ServerPlayer player, MinecraftServer server, String dimension) {
+    private static void teleportToDimension(GameTestHelper helper, ServerPlayer player, MinecraftServer server,
+            String dimension) {
         ServerLevel targetLevel = null;
         for (ServerLevel level : server.getAllLevels()) {
             if (level.dimension().identifier().toString().equals(dimension)) {
@@ -271,7 +276,8 @@ public class RespawnTest {
         return listed != null ? listed : respawned;
     }
 
-    private static void assertRespawnNearWorldSpawn(GameTestHelper helper, ServerPlayer player, ServerLevel level, String context) {
+    private static void assertRespawnNearWorldSpawn(GameTestHelper helper, ServerPlayer player, ServerLevel level,
+            String context) {
         BlockPos spawn = level.getRespawnData().pos();
         assertNearPosition(helper, player, spawn.getX(), spawn.getY(), spawn.getZ(), SPAWN_ZONE_TOLERANCE, context);
     }

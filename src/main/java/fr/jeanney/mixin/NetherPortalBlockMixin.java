@@ -20,14 +20,9 @@ import static net.minecraft.core.registries.Registries.DIMENSION;
 @Mixin(NetherPortalBlock.class)
 public abstract class NetherPortalBlockMixin {
 
-    @Redirect(
-            method = "getPortalDestination(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/portal/TeleportTransition;",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/MinecraftServer;getLevel(Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/server/level/ServerLevel;"
-            )
-    )
-    private ServerLevel redirectGetWorld(MinecraftServer server, ResourceKey<Level> registryKey, ServerLevel world, Entity entity) {
+    @Redirect(method = "getPortalDestination(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/portal/TeleportTransition;", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;getLevel(Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/server/level/ServerLevel;"))
+    private ServerLevel redirectGetWorld(MinecraftServer server, ResourceKey<Level> registryKey, ServerLevel world,
+            Entity entity) {
         if (Objects.equals(world.dimension().identifier().getNamespace(), NAMESPACE)) {
             String originName = world.dimension().identifier().getPath();
             String destinationName = originName.endsWith("_nether")
@@ -36,8 +31,7 @@ public abstract class NetherPortalBlockMixin {
 
             ResourceKey<Level> destinationKey = ResourceKey.create(
                     DIMENSION,
-                    Identifier.fromNamespaceAndPath(NAMESPACE, destinationName)
-            );
+                    Identifier.fromNamespaceAndPath(NAMESPACE, destinationName));
             ServerLevel destinationWorld = server.getLevel(destinationKey);
 
             if (destinationWorld != null) {
@@ -48,13 +42,7 @@ public abstract class NetherPortalBlockMixin {
         return server.getLevel(registryKey);
     }
 
-    @Redirect(
-            method = "getPortalDestination(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/portal/TeleportTransition;",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/level/ServerLevel;dimension()Lnet/minecraft/resources/ResourceKey;"
-            )
-    )
+    @Redirect(method = "getPortalDestination(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/portal/TeleportTransition;", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/level/ServerLevel;dimension()Lnet/minecraft/resources/ResourceKey;"))
     private ResourceKey<Level> redirectGetRegistryKey(ServerLevel serverWorld) {
         ResourceKey<Level> originalKey = serverWorld.dimension();
         String path = originalKey.identifier().getPath();

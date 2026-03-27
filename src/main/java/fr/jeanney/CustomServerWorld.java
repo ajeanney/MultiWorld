@@ -22,7 +22,8 @@ import static net.minecraft.core.registries.Registries.DIMENSION;
 
 public class CustomServerWorld extends ServerLevel {
 
-    public CustomServerWorld(MinecraftServer server, ResourceKey<Level> registryKey, LevelStem options, CustomServerWorldProperties levelProperties, long seed) {
+    public CustomServerWorld(MinecraftServer server, ResourceKey<Level> registryKey, LevelStem options,
+            CustomServerWorldProperties levelProperties, long seed) {
         super(
                 server,
                 Util.backgroundExecutor(),
@@ -33,14 +34,14 @@ public class CustomServerWorld extends ServerLevel {
                 false,
                 seed,
                 ImmutableList.of(
-                    new PhantomSpawner(), new PatrolSpawner(), new CatSpawner(), new VillageSiege(), new WanderingTraderSpawner(server.overworld().getDataStorage())
-                ),
-                true
-        );
+                        new PhantomSpawner(), new PatrolSpawner(), new CatSpawner(), new VillageSiege(),
+                        new WanderingTraderSpawner(server.overworld().getDataStorage())),
+                true);
     }
 
     public interface Constructor {
-        CustomServerWorld create(MinecraftServer server, ResourceKey<Level> registryKey, LevelStem options, CustomServerWorldProperties levelProperties, long seed);
+        CustomServerWorld create(MinecraftServer server, ResourceKey<Level> registryKey, LevelStem options,
+                CustomServerWorldProperties levelProperties, long seed);
     }
 
     @Override
@@ -62,8 +63,7 @@ public class CustomServerWorld extends ServerLevel {
     public static ResourceKey<Level> getRegistryKey(String world) {
         return ResourceKey.create(
                 DIMENSION,
-                Identifier.fromNamespaceAndPath(NAMESPACE, world)
-        );
+                Identifier.fromNamespaceAndPath(NAMESPACE, world));
     }
 
     public static ResourceKey<Level> getMockRegistryKey(Level world) {
@@ -90,18 +90,22 @@ public class CustomServerWorld extends ServerLevel {
     }
 
     public static boolean isCustomEndWorld(ResourceKey<Level> key) {
-        return key.identifier().getPath().endsWith("_end") && Objects.equals(key.identifier().getNamespace(), NAMESPACE);
+        return key.identifier().getPath().endsWith("_end")
+                && Objects.equals(key.identifier().getNamespace(), NAMESPACE);
     }
 
     public static boolean isCustomNetherWorld(ResourceKey<Level> key) {
-        return key.identifier().getPath().endsWith("_nether") && Objects.equals(key.identifier().getNamespace(), NAMESPACE);
+        return key.identifier().getPath().endsWith("_nether")
+                && Objects.equals(key.identifier().getNamespace(), NAMESPACE);
     }
 
     public static boolean isWorldWithNether(ResourceKey<Level> key) {
         if (Objects.equals(key.identifier().getNamespace(), NAMESPACE)) {
             String path = getBaseWorldName(key.identifier().getPath());
-            ResourceKey<Level> worldKey = ResourceKey.create(DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, path));
-            ResourceKey<Level> netherKey = ResourceKey.create(DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, path + "_nether"));
+            ResourceKey<Level> worldKey = ResourceKey.create(DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, path));
+            ResourceKey<Level> netherKey = ResourceKey.create(DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, path + "_nether"));
             return worldKey != null && netherKey != null;
         } else {
             return true;
@@ -111,8 +115,10 @@ public class CustomServerWorld extends ServerLevel {
     public static boolean isWorldWithEnd(ResourceKey<Level> key) {
         if (Objects.equals(key.identifier().getNamespace(), NAMESPACE)) {
             String path = getBaseWorldName(key.identifier().getPath());
-            ResourceKey<Level> worldKey = ResourceKey.create(DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, path));
-            ResourceKey<Level> endKey = ResourceKey.create(DIMENSION, Identifier.fromNamespaceAndPath(NAMESPACE, path + "_end"));
+            ResourceKey<Level> worldKey = ResourceKey.create(DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, path));
+            ResourceKey<Level> endKey = ResourceKey.create(DIMENSION,
+                    Identifier.fromNamespaceAndPath(NAMESPACE, path + "_end"));
             return worldKey != null && endKey != null;
         } else {
             return true;

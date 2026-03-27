@@ -31,19 +31,14 @@ import static net.minecraft.core.registries.Registries.DIMENSION;
 public abstract class EndPortalBlockMixin {
 
     @Inject(at = @At("HEAD"), method = "entityInside", cancellable = true)
-    public void entityInside(BlockState state, Level world, BlockPos pos, Entity entity, InsideBlockEffectApplier handler, boolean bl, CallbackInfo ci) {
+    public void entityInside(BlockState state, Level world, BlockPos pos, Entity entity,
+            InsideBlockEffectApplier handler, boolean bl, CallbackInfo ci) {
         if (!isWorldWithEnd(entity.level().dimension())) {
             ci.cancel();
         }
     }
 
-    @Redirect(
-            method = "entityInside",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;"
-            )
-    )
+    @Redirect(method = "entityInside", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/Level;dimension()Lnet/minecraft/resources/ResourceKey;"))
     private ResourceKey<Level> redirectGetRegistryKey(Level world) {
         ResourceKey<Level> originalKey = world.dimension();
 
@@ -54,12 +49,7 @@ public abstract class EndPortalBlockMixin {
         return originalKey;
     }
 
-    @ModifyVariable(
-            method = "getPortalDestination(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/portal/TeleportTransition;",
-            at = @At(value = "STORE"),
-            ordinal = 0,
-            name = "bl"
-    )
+    @ModifyVariable(method = "getPortalDestination(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/portal/TeleportTransition;", at = @At(value = "STORE"), ordinal = 0, name = "bl")
     private boolean modifyEndFlag(boolean bl, ServerLevel world, Entity entity, BlockPos pos) {
         ResourceKey<Level> currentWorldKey = world.dimension();
 
@@ -74,14 +64,9 @@ public abstract class EndPortalBlockMixin {
         return bl;
     }
 
-    @Redirect(
-            method = "getPortalDestination(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/portal/TeleportTransition;",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/MinecraftServer;getLevel(Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/server/level/ServerLevel;"
-            )
-    )
-    private ServerLevel redirectGetWorld(MinecraftServer server, ResourceKey<Level> registryKey, ServerLevel world, Entity entity, BlockPos pos) {
+    @Redirect(method = "getPortalDestination(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/portal/TeleportTransition;", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;getLevel(Lnet/minecraft/resources/ResourceKey;)Lnet/minecraft/server/level/ServerLevel;"))
+    private ServerLevel redirectGetWorld(MinecraftServer server, ResourceKey<Level> registryKey, ServerLevel world,
+            Entity entity, BlockPos pos) {
         ServerLevel targetWorld = server.getLevel(registryKey);
         ServerLevel initialWorld = entity.level().getServer().getLevel(entity.level().dimension());
 
@@ -90,8 +75,7 @@ public abstract class EndPortalBlockMixin {
 
             ResourceKey<Level> destinationKey = ResourceKey.create(
                     DIMENSION,
-                    Identifier.fromNamespaceAndPath(NAMESPACE, destinationName)
-            );
+                    Identifier.fromNamespaceAndPath(NAMESPACE, destinationName));
             ServerLevel destinationWorld = initialWorld.getServer().getLevel(destinationKey);
 
             if (destinationWorld != null) {
@@ -111,8 +95,7 @@ public abstract class EndPortalBlockMixin {
 
         if (originName.endsWith("_end")) {
             destinationName = originName.substring(0, originName.length() - 4);
-        }
-        else {
+        } else {
             destinationName = originName + "_end";
         }
         return destinationName;

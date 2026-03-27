@@ -21,13 +21,7 @@ import static fr.jeanney.MultiWorld.NAMESPACE;
 @Mixin(TeleportTransition.class)
 public abstract class TeleportTransitionMixin {
 
-    @Redirect(
-            method = "createDefault",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/MinecraftServer;findRespawnDimension()Lnet/minecraft/server/level/ServerLevel;"
-            )
-    )
+    @Redirect(method = "createDefault", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;findRespawnDimension()Lnet/minecraft/server/level/ServerLevel;"))
     private static ServerLevel redirectGetSpawnWorldInCreateDefault(MinecraftServer server, ServerPlayer player) {
         ServerLevel currentWorld = player.level();
 
@@ -46,13 +40,7 @@ public abstract class TeleportTransitionMixin {
         return server.findRespawnDimension();
     }
 
-    @Redirect(
-            method = "missingRespawnBlock",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/server/MinecraftServer;findRespawnDimension()Lnet/minecraft/server/level/ServerLevel;"
-            )
-    )
+    @Redirect(method = "missingRespawnBlock", at = @At(value = "INVOKE", target = "Lnet/minecraft/server/MinecraftServer;findRespawnDimension()Lnet/minecraft/server/level/ServerLevel;"))
     private static ServerLevel redirectGetSpawnWorldInMissingRespawnBlock(MinecraftServer server, ServerPlayer player) {
         ServerLevel currentWorld = player.level();
 
@@ -71,13 +59,7 @@ public abstract class TeleportTransitionMixin {
         return server.findRespawnDimension();
     }
 
-    @Redirect(
-            method = "createDefault",
-            at = @At(
-                    value = "INVOKE",
-                    target = "Lnet/minecraft/world/level/portal/TeleportTransition;findAdjustedSharedSpawnPos(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/world/phys/Vec3;"
-            )
-    )
+    @Redirect(method = "createDefault", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/level/portal/TeleportTransition;findAdjustedSharedSpawnPos(Lnet/minecraft/server/level/ServerLevel;Lnet/minecraft/world/entity/Entity;)Lnet/minecraft/world/phys/Vec3;"))
     private static Vec3 redirectFindAdjustedSharedSpawnPos(ServerLevel world, Entity entity) {
         Level entityWorld = entity.level();
         if (isCreativeWorld(entityWorld.dimension())) {

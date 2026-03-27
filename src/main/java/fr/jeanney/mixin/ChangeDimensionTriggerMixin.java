@@ -17,9 +17,11 @@ import static fr.jeanney.CustomServerWorld.isCustomNetherWorld;
 public class ChangeDimensionTriggerMixin {
 
     @Final
-    @Shadow private Optional<ResourceKey<Level>> from;
+    @Shadow
+    private Optional<ResourceKey<Level>> from;
     @Final
-    @Shadow private Optional<ResourceKey<Level>> to;
+    @Shadow
+    private Optional<ResourceKey<Level>> to;
 
     /**
      * @author Uxzylon

@@ -35,7 +35,8 @@ public class PortalDimensionTest {
         buildNetherPortal(overworld, base);
         BlockPos portalPos = base.offset(1, 1, 0);
 
-        // Use getPortalDestination directly to get the transition (tests the mixin routing)
+        // Use getPortalDestination directly to get the transition (tests the mixin
+        // routing)
         TeleportTransition transition = ((NetherPortalBlock) Blocks.NETHER_PORTAL)
                 .getPortalDestination(overworld, player, portalPos);
         if (transition == null) {
@@ -220,7 +221,8 @@ public class PortalDimensionTest {
     // --- Helpers ---
 
     private static void buildNetherPortal(ServerLevel level, BlockPos base) {
-        // Build 4-wide, 5-tall obsidian frame (portal in XY plane, walk through along Z)
+        // Build 4-wide, 5-tall obsidian frame (portal in XY plane, walk through along
+        // Z)
         for (int x = 0; x < 4; x++) {
             for (int y = 0; y < 5; y++) {
                 if (x == 0 || x == 3 || y == 0 || y == 4) {
@@ -253,7 +255,7 @@ public class PortalDimensionTest {
     }
 
     private static void assertDimensionKey(GameTestHelper helper, ResourceKey<Level> actual,
-                                           String expectedNamespace, String expectedPath, String context) {
+            String expectedNamespace, String expectedPath, String context) {
         String ns = actual.identifier().getNamespace();
         String path = actual.identifier().getPath();
         if (!expectedNamespace.equals(ns) || !expectedPath.equals(path)) {

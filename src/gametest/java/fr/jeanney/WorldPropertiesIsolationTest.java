@@ -242,7 +242,8 @@ public class WorldPropertiesIsolationTest {
             boolean initialCustomKeepInventory = custom.getGameRules().get(GameRules.KEEP_INVENTORY);
 
             if (!setKeepInventoryViaCommand(server, server.overworld(), true)) {
-                // Some GameTest runtimes expose /gamerule in read-only form. Fall back to API mutation
+                // Some GameTest runtimes expose /gamerule in read-only form. Fall back to API
+                // mutation
                 // so we can still verify per-world keepInventory behavior across death/respawn.
                 server.overworld().getGameRules().set(GameRules.KEEP_INVENTORY, true, server);
             }
@@ -277,7 +278,8 @@ public class WorldPropertiesIsolationTest {
                 }
 
                 respawned.getInventory().add(new ItemStack(Items.EMERALD, 1));
-                assertHasItem(helper, respawned, Items.EMERALD, "in custom world before death with keepInventory=false");
+                assertHasItem(helper, respawned, Items.EMERALD,
+                        "in custom world before death with keepInventory=false");
 
                 ServerPlayer customRespawn = killAndRespawn(respawned, server);
                 assertInDimension(helper, customRespawn, NAMESPACE, ISOLATION_KEEP_INVENTORY_WORLD);
@@ -293,8 +295,7 @@ public class WorldPropertiesIsolationTest {
     private static ServerLevel getCustomWorld(MinecraftServer server, String worldName) {
         ResourceKey<Level> worldKey = ResourceKey.create(
                 Registries.DIMENSION,
-                Identifier.fromNamespaceAndPath(NAMESPACE, worldName)
-        );
+                Identifier.fromNamespaceAndPath(NAMESPACE, worldName));
         return server.getLevel(worldKey);
     }
 
@@ -314,33 +315,8 @@ public class WorldPropertiesIsolationTest {
 
     private static boolean setKeepInventoryViaCommand(MinecraftServer server, ServerLevel level, boolean value) {
         String boolValue = value ? "true" : "false";
-        String altBoolValue = value ? "on" : "off";
-        String[] candidates = {
-                "gamerule keepInventory " + boolValue,
-                "gamerule keepInventory set " + boolValue,
-            "gamerule set keepInventory " + boolValue,
-            "gamerule keepinventory " + boolValue,
-            "gamerule keepinventory set " + boolValue,
-            "gamerule set keepinventory " + boolValue,
-            "gamerules keepInventory " + boolValue,
-            "gamerules keepInventory set " + boolValue,
-            "gamerules set keepInventory " + boolValue,
-            "gamerules keepinventory " + boolValue,
-            "gamerules keepinventory set " + boolValue,
-            "gamerules set keepinventory " + boolValue,
-            "gamerule keepInventory " + altBoolValue,
-            "gamerule keepinventory " + altBoolValue,
-            "gamerules keepInventory " + altBoolValue,
-            "gamerules keepinventory " + altBoolValue
-        };
 
-        for (String candidate : candidates) {
-            runCommandInWorld(server, level, candidate);
-            if (level.getGameRules().get(GameRules.KEEP_INVENTORY) == value) {
-                return true;
-            }
-        }
-
-        return false;
+        runCommandInWorld(server, level, "gamerule keep_inventory " + boolValue);
+        return level.getGameRules().get(GameRules.KEEP_INVENTORY) == value;
     }
 }

@@ -13,7 +13,8 @@ import static fr.jeanney.CustomServerWorld.isCreativeWorld;
 
 @Mixin(PlayerAdvancements.class)
 public abstract class PlayerAdvancementsMixin {
-    @Shadow private ServerPlayer player;
+    @Shadow
+    private ServerPlayer player;
 
     @Inject(at = @At("HEAD"), method = "award", cancellable = true)
     public void award(AdvancementHolder advancement, String criterionName, CallbackInfoReturnable<Boolean> cir) {

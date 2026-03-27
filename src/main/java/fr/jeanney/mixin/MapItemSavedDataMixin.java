@@ -19,13 +19,7 @@ public abstract class MapItemSavedDataMixin {
     @Shadow
     public ResourceKey<Level> dimension;
 
-    @Redirect(
-            method = "calculateRotation",
-            at = @At(
-                    value = "FIELD",
-                    target = "Lnet/minecraft/world/level/saveddata/maps/MapItemSavedData;dimension:Lnet/minecraft/resources/ResourceKey;",
-                    opcode = Opcodes.GETFIELD)
-    )
+    @Redirect(method = "calculateRotation", at = @At(value = "FIELD", target = "Lnet/minecraft/world/level/saveddata/maps/MapItemSavedData;dimension:Lnet/minecraft/resources/ResourceKey;", opcode = Opcodes.GETFIELD))
     private ResourceKey<Level> redirectDimension(MapItemSavedData instance) {
         return getMockRegistryKey(this.dimension);
     }

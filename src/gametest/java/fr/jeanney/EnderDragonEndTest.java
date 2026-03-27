@@ -34,7 +34,10 @@ public class EnderDragonEndTest {
         MinecraftServer server = helper.getLevel().getServer();
 
         ServerLevel end = server.getLevel(Level.END);
-        if (end == null) { helper.fail("End dimension not found"); return; }
+        if (end == null) {
+            helper.fail("End dimension not found");
+            return;
+        }
 
         // Teleport player to end center to load chunks and trigger dragon fight
         teleportToLevel(player, end);
@@ -42,11 +45,17 @@ public class EnderDragonEndTest {
         // Wait for dragon fight to initialize and dragon to spawn
         helper.runAfterDelay(200, () -> {
             EnderDragonFight dragonFight = end.getDragonFight();
-            if (dragonFight == null) { helper.fail("No dragon fight in end"); return; }
+            if (dragonFight == null) {
+                helper.fail("No dragon fight in end");
+                return;
+            }
 
             // --- 1. Verify ender dragon is present ---
             List<? extends EnderDragon> dragons = end.getDragons();
-            if (dragons.isEmpty()) { helper.fail("No ender dragon found in end"); return; }
+            if (dragons.isEmpty()) {
+                helper.fail("No ender dragon found in end");
+                return;
+            }
 
             EnderDragon dragon = dragons.getFirst();
 
@@ -56,12 +65,18 @@ public class EnderDragonEndTest {
             helper.runAfterDelay(20, () -> {
                 // --- 3. Verify exit portal blocks exist at center ---
                 BlockPos exitPortalPos = findExitPortalBlock(end);
-                if (exitPortalPos == null) { helper.fail("No exit portal found in end after dragon kill"); return; }
+                if (exitPortalPos == null) {
+                    helper.fail("No exit portal found in end after dragon kill");
+                    return;
+                }
 
                 // --- 4. Test exit portal routes back to overworld ---
                 TeleportTransition transition = ((EndPortalBlock) Blocks.END_PORTAL)
                         .getPortalDestination(end, player, exitPortalPos);
-                if (transition == null) { helper.fail("Exit portal returned null transition"); return; }
+                if (transition == null) {
+                    helper.fail("Exit portal returned null transition");
+                    return;
+                }
                 assertDimensionKey(helper, transition.newLevel().dimension(), "minecraft", "overworld",
                         "exit portal destination");
 
@@ -72,14 +87,23 @@ public class EnderDragonEndTest {
 
                 // --- 6. Verify end gateway was spawned ---
                 BlockPos gatewayPos = findEndGatewayBlock(end);
-                if (gatewayPos == null) { helper.fail("No end gateway found after dragon kill"); return; }
+                if (gatewayPos == null) {
+                    helper.fail("No end gateway found after dragon kill");
+                    return;
+                }
 
                 // --- 7. Test end gateway stays in end dimension ---
                 TheEndGatewayBlockEntity gateway = (TheEndGatewayBlockEntity) end.getBlockEntity(gatewayPos);
-                if (gateway == null) { helper.fail("Gateway block entity is null"); return; }
+                if (gateway == null) {
+                    helper.fail("Gateway block entity is null");
+                    return;
+                }
 
                 Vec3 gatewayExitPos = gateway.getPortalPosition(end, gatewayPos);
-                if (gatewayExitPos == null) { helper.fail("Gateway exit position is null"); return; }
+                if (gatewayExitPos == null) {
+                    helper.fail("Gateway exit position is null");
+                    return;
+                }
 
                 // Teleport player back to end and through gateway
                 teleportToLevel(player, end);
@@ -111,7 +135,10 @@ public class EnderDragonEndTest {
 
             // Find custom end dimension
             ServerLevel customEnd = findLevel(server, NAMESPACE + ":" + CUSTOM_WORLD + "_end");
-            if (customEnd == null) { helper.fail("custom end dimension not found"); return; }
+            if (customEnd == null) {
+                helper.fail("custom end dimension not found");
+                return;
+            }
 
             // Teleport player to custom_end center
             teleportToLevel(player, customEnd);
@@ -119,15 +146,18 @@ public class EnderDragonEndTest {
             // Wait for dragon fight to initialize
             helper.runAfterDelay(200, () -> {
                 EnderDragonFight dragonFight = customEnd.getDragonFight();
-                if (dragonFight == null) { helper.fail("No dragon fight in custom_end"); return; }
+                if (dragonFight == null) {
+                    helper.fail("No dragon fight in custom_end");
+                    return;
+                }
 
                 // --- 1. Verify ender dragon is present in custom_end ---
                 List<? extends EnderDragon> dragons = customEnd.getDragons();
                 if (dragons.isEmpty()) {
                     server.getCommands().performPrefixedCommand(
                             server.createCommandSourceStack(),
-                            "execute in " + NAMESPACE + ":" + CUSTOM_WORLD + "_end run summon minecraft:ender_dragon 0 80 0"
-                    );
+                            "execute in " + NAMESPACE + ":" + CUSTOM_WORLD
+                                    + "_end run summon minecraft:ender_dragon 0 80 0");
                     helper.runAfterDelay(20, () -> continueCreativeEndSequence(helper, player, customEnd, dragonFight));
                     return;
                 }
@@ -137,7 +167,8 @@ public class EnderDragonEndTest {
         });
     }
 
-    private static void continueCreativeEndSequence(GameTestHelper helper, ServerPlayer player, ServerLevel customEnd, EnderDragonFight dragonFight) {
+    private static void continueCreativeEndSequence(GameTestHelper helper, ServerPlayer player, ServerLevel customEnd,
+            EnderDragonFight dragonFight) {
         List<? extends EnderDragon> dragons = customEnd.getDragons();
         if (dragons.isEmpty()) {
             helper.fail("No ender dragon found in custom_end");
@@ -158,10 +189,13 @@ public class EnderDragonEndTest {
 
             // --- 4. Test exit portal routes back to custom world (not overworld) ---
             TeleportTransition transition = ((EndPortalBlock) Blocks.END_PORTAL)
-                .getPortalDestination(customEnd, player, exitPortalPos);
-            if (transition == null) { helper.fail("Exit portal returned null transition"); return; }
+                    .getPortalDestination(customEnd, player, exitPortalPos);
+            if (transition == null) {
+                helper.fail("Exit portal returned null transition");
+                return;
+            }
             assertDimensionKey(helper, transition.newLevel().dimension(), NAMESPACE, CUSTOM_WORLD,
-                "custom_end exit portal destination");
+                    "custom_end exit portal destination");
 
             // --- 5. Go through exit portal -> player ends up in custom world ---
             player.teleport(transition);
@@ -177,10 +211,16 @@ public class EnderDragonEndTest {
 
             // --- 7. Test end gateway stays in custom_end dimension ---
             TheEndGatewayBlockEntity gateway = (TheEndGatewayBlockEntity) customEnd.getBlockEntity(gatewayPos);
-            if (gateway == null) { helper.fail("Gateway block entity is null"); return; }
+            if (gateway == null) {
+                helper.fail("Gateway block entity is null");
+                return;
+            }
 
             Vec3 gatewayExitPos = gateway.getPortalPosition(customEnd, gatewayPos);
-            if (gatewayExitPos == null) { helper.fail("Gateway exit position is null"); return; }
+            if (gatewayExitPos == null) {
+                helper.fail("Gateway exit position is null");
+                return;
+            }
 
             // Teleport player back to custom_end and through gateway
             teleportToLevel(player, customEnd);
@@ -214,7 +254,8 @@ public class EnderDragonEndTest {
 
     private static BlockPos findExitPortalBlock(ServerLevel level) {
         // Exit portal is at the center of the end around (0, y, 0)
-        // Y range is wide because custom end worlds may place portal at low Y if terrain isn't generated
+        // Y range is wide because custom end worlds may place portal at low Y if
+        // terrain isn't generated
         for (int y = level.getMinY(); y <= 128; y++) {
             for (int x = -5; x <= 5; x++) {
                 for (int z = -5; z <= 5; z++) {
@@ -250,8 +291,8 @@ public class EnderDragonEndTest {
     }
 
     private static void assertDimensionKey(GameTestHelper helper,
-                                            net.minecraft.resources.ResourceKey<Level> dim,
-                                            String expectedNamespace, String expectedPath, String context) {
+            net.minecraft.resources.ResourceKey<Level> dim,
+            String expectedNamespace, String expectedPath, String context) {
         String ns = dim.identifier().getNamespace();
         String path = dim.identifier().getPath();
         if (!expectedNamespace.equals(ns) || !expectedPath.equals(path)) {
